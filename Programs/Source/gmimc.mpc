@@ -1,0 +1,227 @@
+from math import ceil, log2, log, gcd
+from Cryptodome.Hash import SHAKE128
+
+from Compiler.library import else_, if_e, print_ln, start_timer, stop_timer
+from Compiler import program
+from Compiler.types import *
+
+class GMimc:
+    def __init__(self, p, t, use_squares):
+        self.use_squares = use_squares
+        self.p = p
+        self.t = t
+        self.d = GMimc.get_d(p)
+        shake = GMimc.init_shake(p)
+
+        self.rounds = GMimc.calc_round_numbers(p, t, self.d)
+        self.rc = self.gen_rc(self.rounds, shake)
+
+    def print_depth(self):
+        squares = 0
+        depth = 0
+        mul = 0
+        if self.d == 3:
+            if self.use_squares:
+                squares = self.rounds
+                mul = self.rounds
+                depth = self.rounds + 1
+            else:
+                depth = self.rounds * 2
+                mul = self.rounds * 2
+        elif self.d == 5:
+            if self.use_squares:
+                squares = self.rounds * 2
+                depth = self.rounds * 3
+                mul = self.rounds
+            else:
+                depth = self.rounds * 3
+                mul = self.rounds * 3
+        else:
+            assert(False)
+
+        print_ln("Expected:")
+        print_ln("  %s inverses", 0)
+        print_ln("  %s squares", squares)
+        print_ln("  %s muls", mul)
+        print_ln("  %s depth", depth  + 1) # reveal included
+
+    @staticmethod
+    def get_d(p):
+        for d in range(3, p):
+            if gcd(d, p - 1) == 1:
+                break
+        return d
+
+    @staticmethod
+    def init_shake(p):
+        bitlen = p.bit_length()
+        num = ceil(bitlen / 64)
+
+        shake = SHAKE128.new()
+        shake.update('GMimc'.encode('ascii'))
+        for i in range(num):
+            prime_block = (p >> (i * 64)) & ((0x1 << 64) - 1)
+            shake.update(int(prime_block).to_bytes(8, byteorder = 'little'))
+        return shake
+
+    def field_element_from_shake(self, shake):
+        bitlen = self.p.bit_length()
+        byte = ceil(bitlen / 8)
+        word = ceil(byte / 8)
+
+        while True:
+            word_buf = [0] * word
+            buf = shake.read(byte)
+            for i in range(word):
+                byte_array = [0] * 8
+                for j in range(i * 8, min((i + 1) * 8, byte)):
+                    byte_array[j - i * 8] = buf[j];
+                word_buf[i] = int.from_bytes(byte_array, byteorder = 'little')
+            res = 0
+            for el in reversed(word_buf):
+                res = (res << 64) + el
+            if res < self.p:
+                return res
+
+
+    @staticmethod
+    def calc_round_numbers(p, t, d):
+        return max(2 + 2 * (t + t * t), ceil(2 * log(p, d)) + 2 * t)
+
+    def gen_rc(self, num, shake):
+        round_constants = []
+        for _ in range(num):
+            rc = self.field_element_from_shake(shake)
+            round_constants.append(rc)
+        return round_constants
+
+    def sbox_plain(self, x):
+        return pow(x, self.d, self.p)
+
+    def round_function_plain(self, state, key, r):
+        x = (state[0] + key[r % len(key)] + self.rc[r]) % self.p
+        x = self.sbox_plain(x)
+        for i in range(1, self.t):
+            state[i] = (state[i] + x) % self.p
+        return state
+
+    def encrypt_plain(self, plains, key):
+        state = plains.copy()
+
+        for r in range(self.rounds - 1):
+            state = self.round_function_plain(state, key, r)
+            state = state[-1:] + state[:-1]
+        state = self.round_function_plain(state, key, self.rounds - 1)
+
+        return state
+
+    def compute_cube(self, x):
+        if self.use_squares:
+            r, rsq = sint.get_random_square()
+            r_cube = r * rsq
+            y = (x - r).reveal()
+            return 3 * y * rsq + 3 * y ** 2 * r + y ** 3 + r_cube
+        else:
+            return x * x * x
+
+    def sbox(self, x):
+        if self.d == 3:
+            return self.compute_cube(x)
+        else:
+            return x ** self.d
+
+    def round_function(self, state, key, r):
+        x = state[0] + key[r % len(key)] + self.rc[r]
+        x = self.sbox(x)
+        for i in range(1, self.t):
+            state[i] = state[i] + x
+        return state
+
+    def encrypt(self, plains, key):
+        state = plains.copy()
+
+        for r in range(self.rounds - 1):
+            state = self.round_function(state, key, r)
+            state = state[-1:] + state[:-1]
+        state = self.round_function(state, key, self.rounds - 1)
+
+        return state
+
+
+def plain(gmimc, mk, plaintext):
+    ct = gmimc.encrypt_plain(plaintext, mk)
+    return ct
+
+def shared(gmimc, mk, plaintext):
+    t = len(mk)
+    mk_ = sint.Array(len(mk))
+    for i in range(len(mk)):
+        mk_[i] = sint(mk[i])
+
+    ct = gmimc.encrypt(plaintext, mk_)
+    return ct
+
+def reveal(shared):
+    res = []
+    for s in shared:
+        c = s.reveal()
+        res.append(c)
+    return res
+
+def compare(a, b):
+    if len(a) != len(b):
+        return False
+    t = len(a)
+    correct = cint(0)
+    for i in range(t):
+        correct = correct + a[i] - b[i]
+
+    @if_e(correct == 0)
+    def _():
+        print_ln("Correct")
+    @else_
+    def _():
+        print_ln("A Error occured!?")
+
+def main(t, use_squares):
+    p = program.prime
+    l = p.bit_length()
+    program.set_bit_length(l)
+    print_ln("Prime %s with %s-bit", p, l)
+    print_ln("Having %s plaintexts", t)
+
+    gmimc = GMimc(p, t, use_squares)
+    gmimc.print_depth()
+
+    plaintext = [i for i in range(t)]
+    key = [1]
+    ct = plain(gmimc, key, plaintext)
+
+    print_ln("Running MPC")
+    start_timer(1)
+    ct_ = shared(gmimc, key, plaintext)
+    ct_ = reveal(ct_)
+    stop_timer(1)
+    compare(ct, ct_)
+
+# default
+t = 5
+use_squares = False
+
+args = len(program.args)
+if args > 1:
+    t = int(program.args[1])
+if args > 2:
+    use_squares = bool(int(program.args[2]))
+
+if program.prime == None:
+    print('Error: No prime provided')
+    exit()
+
+program.name = "gmimc"
+print("Compiling: for")
+print("Prime = " + str(program.prime))
+print("t = " + str(t))
+print("Using Squares = " + str(use_squares))
+program.use_square(use_squares)
+main(t, use_squares)

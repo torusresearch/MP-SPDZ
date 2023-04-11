@@ -1,0 +1,701 @@
+from math import ceil, log, gcd, factorial, floor, sqrt
+from Cryptodome.Hash import SHAKE128
+
+from Compiler.library import else_, for_range_parallel, if_e, print_ln, start_timer, stop_timer
+from Compiler import program
+from Compiler.types import *
+
+##################################################################################
+# Constants for p = 170141183460469231731687303715884105773
+PREC_Mi = [
+    [148338975704289183078830725617480653086, 1, 1, 1],
+    [81755400807643375524140152795819066603, 157510637476605425349690965550914172464, 1, 1],
+    [144205323307769853887929355624798486815, 1, 134746447437603741985879507057763577036, 1],
+    [97338312373589161471428904254291064220, 1, 1, 134886453377838965658537975854069066454]
+]
+
+PREC_Mh = [
+    [163601491807594223605198844291511598666, 1, 1, 1, 1, 1, 1, 1],
+    [108514101966968812773805782140658587016, 155415696120173428700822693500116923620, 1, 1, 1, 1, 1, 1],
+    [8074169233982186925081135419516962209, 1, 74584737185149108454918326386981402442, 1, 1, 1, 1, 1],
+    [91999974057458503943175429222592370385, 1, 1, 9200069807639506447413581997606151774, 1, 1, 1, 1],
+    [136490960659299672173109029955566650231, 1, 1, 1, 77516697531437935991848232396080275947, 1, 1, 1],
+    [82403957467071892156650842781820313944, 1, 1, 1, 1, 60114992161939905182921775829234000137, 1, 1],
+    [115367924998838323914257977331641616779, 1, 1, 1, 1, 1, 104563064919500699381072998579918933303, 1],
+    [12423058366552370047591542822930846967, 1, 1, 1, 1, 1, 1, 42769761522049549139664467455313750225]
+]
+
+##################################################################################
+
+class Hydra:
+    def __init__(self, p, kappa, t, use_squares):
+        self.use_squares = use_squares
+        self.p = p
+        self.kappa = kappa
+        self.perms = Hydra.num_perms(t)
+        self.d = Hydra.get_d(p)
+        self.Re_1, self.Re_2, self.Ri, self.Rh = Hydra.get_rounds(p, kappa, self.d)
+
+        self.Me = self.gen_circ_matrix([3, 2, 1, 1])
+        if p == 170141183460469231731687303715884105773:
+            self.Mi = PREC_Mi
+            self.Mh = PREC_Mh
+        else:
+            # no checks implemented, use sage script to generate!
+            shake = Hydra.init_shake(p, "Matrices")
+            self.Mi = self.gen_mi(shake)
+            self.Mh = self.gen_mh(shake)
+
+        # from here, just random values (without zero)
+        shake = Hydra.init_shake(p, "Constants")
+        self.rc_b = self.gen_rc(self.Re_1 + self.Re_2 + self.Ri, 4, shake)
+        self.rc_h = self.gen_rc(self.Rh, 8, shake)
+
+        # from here, random constants for the heads
+        shake = Hydra.init_shake(p, "Rolling")
+        self.rc_r = self.gen_rc(self.perms - 1, 8, shake)
+
+    def print_depth(self):
+        Re = self.Re_1 + self.Re_2
+
+        pe_mul = 0
+        pe_depth = 0
+        pe_squares = 0
+
+        if self.d == 3:
+            if self.use_squares:
+                pe_squares = Re * 4
+                pe_mul = Re * 4
+                pe_depth = Re + 1
+            else:
+                pe_depth = Re * 2
+                pe_mul = (Re * 4) * 2
+        elif self.d == 5:
+            if self.use_squares:
+                pe_squares = (Re * 4) * 2
+                pe_depth = Re * 3
+                pe_mul = Re * 4
+            else:
+                pe_depth = Re * 3
+                pe_mul = (Re * 4) * 3
+        else:
+            assert(False)
+
+        lm_head_mul_depth = 1
+        lm_inner_mul_depth = 2
+
+        squares = pe_squares
+        mul = pe_mul + self.Ri * lm_inner_mul_depth + self.Rh * lm_head_mul_depth * self.perms
+        depth = pe_depth + self.Ri * lm_inner_mul_depth + self.Rh * lm_head_mul_depth
+
+        mul = mul + 2 * (self.perms - 1) # rolling mul
+        depth = depth + self.perms - 1 # non-parallel rolling
+
+        print_ln("Expected:")
+        print_ln("  %s inverses", 0)
+        print_ln("  %s squares", squares)
+        print_ln("  %s muls", mul)
+        print_ln("  %s depth", depth  + 1) # reveal included
+
+    @staticmethod
+    def get_R_star(kappa):
+        assert(kappa >= 80)
+        assert(kappa <= 256)
+        R_star = [
+            19, 19, 19, 19, 20, 20, 20, 20, 20, 21, 21, 21, 21, 21, 22, 22, 23,
+            23, 23, 23, 23, 23, 24, 24, 24, 24, 24, 25, 25, 25, 25, 25, 25, 26,
+            26, 26, 26, 26, 27, 27, 27, 27, 27, 27, 28, 28, 29, 29, 29, 29, 29,
+            30, 30, 30, 30, 30, 30, 31, 31, 31, 31, 31, 32, 32, 32, 32, 32, 32,
+            33, 33, 33, 33, 33, 34, 34, 34, 34, 34, 34, 35, 35, 36, 36, 36, 36,
+            36, 37, 37, 37, 37, 37, 37, 38, 38, 38, 38, 38, 39, 39, 39, 39, 39,
+            39, 40, 40, 40, 40, 40, 41, 41, 41, 41, 41, 41, 42, 42, 42, 42, 42,
+            43, 43, 44, 44, 44, 44, 44, 44, 45, 45, 45, 45, 45, 46, 46, 46, 46,
+            46, 46, 47, 47, 47, 47, 47, 48, 48, 48, 48, 48, 48, 49, 49, 49, 49,
+            49, 50, 50, 50, 50, 50, 50, 51, 51, 52, 52, 52, 52, 52, 53, 53, 53,
+            53, 53, 53, 54, 54, 54, 54
+        ]
+        return R_star[kappa - 80]
+
+    @staticmethod
+    def get_round_num_head(p, kappa):
+        R_star = Hydra.get_R_star(kappa)
+
+        x0 = kappa / 24 + log(12, 2)
+        x1 = (kappa - log(p, 2)) / 22 + log(11, 2)
+        R_hat = 3 + ceil(max(x0, x1))
+        R = ceil(1.25 * ceil(max(24, R_hat, R_star + 2)))
+        return R
+
+    @staticmethod
+    def get_round_num_internal(p, kappa, d):
+        x0 = kappa / float(16)
+        x1 = (kappa - log(p, 2)) / float(12)
+        R_hat = 4 - floor(log(d, 2)) + ceil(max(x0, x1))
+        R = ceil(1.125 * ceil(max(kappa/4 - log(d, 2) + 6, R_hat)))
+        return R
+
+    @staticmethod
+    def get_rounds(p, kappa, d):
+        Re_1 = 2
+        Re_2 = 4
+        Ri = Hydra.get_round_num_internal(p, kappa, d)
+        Rh = Hydra.get_round_num_head(p, kappa)
+        return Re_1, Re_2, Ri, Rh
+
+    @staticmethod
+    def init_shake(p, string):
+        bitlen = p.bit_length()
+        num = ceil(bitlen / 64)
+
+        shake = SHAKE128.new()
+        shake.update('Hydra'.encode('ascii'))
+        shake.update(string.encode('ascii'))
+        for i in range(num):
+            prime_block = (p >> (i * 64)) & ((0x1 << 64) - 1)
+            shake.update(int(prime_block).to_bytes(8, byteorder = 'little'))
+        return shake
+
+    def field_element_from_shake(self, shake):
+        bitlen = self.p.bit_length()
+        byte = ceil(bitlen / 8)
+        word = ceil(byte / 8)
+
+        while True:
+            word_buf = [0] * word
+            buf = shake.read(byte)
+            for i in range(word):
+                byte_array = [0] * 8
+                for j in range(i * 8, min((i + 1) * 8, byte)):
+                    byte_array[j - i * 8] = buf[j];
+                word_buf[i] = int.from_bytes(byte_array, byteorder = 'little')
+            res = 0
+            for el in reversed(word_buf):
+                res = (res << 64) + el
+            if res < self.p:
+                return res
+
+    def field_element_from_shake_without_0(self, shake):
+        while True:
+            el = self.field_element_from_shake(shake)
+            if el != 0:
+                return el
+
+    def check_conditions(self, lambdas, matrix, size):
+        # No subspace checks!
+        sum_ = 0
+        for j in range(size):
+            inner = 0
+            for l in range(size):
+                inner = inner + matrix[j][l]
+                if j == 0 or j == l:
+                    inner = inner + 1 # account for -1 when creating the matrices for efficient implementation
+            sum_ = (sum_ + lambdas[j] * inner) % self.p
+
+        if sum_ == 0:
+            return False
+
+        for j in range(size):
+            sum_ = 0
+            for l in range(size):
+                el = matrix[l][j]
+                if l == 0 or j == l:
+                    el = el + 1 # account for -1 when creating the matrices for efficient implementation
+                sum_ = (sum_ + lambdas[l] * el) % self.p
+            if sum_ == 0:
+                return False
+
+        return True
+
+    def gen_matrix(self, shake, size):
+        # just a random one without subspace trail check!
+        M = [[1]*size for _ in range(size)]
+        M[0][0] = (self.field_element_from_shake_without_0(shake) - 1) % self.p
+        for i in range(1, size):
+            M[i][0] = (self.field_element_from_shake_without_0(shake) - 1) % self.p
+            M[i][i] = (self.field_element_from_shake_without_0(shake) - 1) % self.p
+        return M
+
+    def gen_mi(self, shake):
+        # No supspace check!
+        lambda1 = [1, self.p - 1, 1, self.p - 1]
+        lambda2 = [1, 1, self.p - 1, self.p - 1]
+        while True:
+            M = self.gen_matrix(shake, 4)
+            if self.check_conditions(lambda1, M, 4) and self.check_conditions(lambda2, M, 4):
+                return M
+
+    def gen_mh(self, shake):
+        # No supspace check!
+        lambdas = [1, 1, 1, 1, self.p - 1, self.p - 1, self.p - 1, self.p - 1]
+        while True:
+            M = self.gen_matrix(shake, 8)
+            if self.check_conditions(lambdas, M, 8):
+                return M
+
+    @staticmethod
+    def gen_circ_matrix(row):
+        rot = row.copy()
+        M = []
+        M.append(rot)
+        for i in range(1, len(row)):
+            rot = rot[-1:] + rot[:-1]
+            M.append(rot)
+        return M
+
+    def gen_rc(self, R, t, shake):
+        round_constants = []
+        for _ in range(R):
+            rc = []
+            for i in range(t):
+               rc.append(self.field_element_from_shake(shake))
+            round_constants.append(rc)
+        return round_constants
+
+    @staticmethod
+    def get_d(p):
+        for d in range(3, p):
+            if gcd(d, p - 1) == 1:
+                break
+        return d
+
+    @staticmethod
+    def xgcd(a, b):
+        x0, x1, y0, y1 = 0, 1, 1, 0
+        while a != 0:
+            (q, a), b = divmod(b, a), a
+            y0, y1 = y1, y0 - q * y1
+            x0, x1 = x1, x0 - q * x1
+        return b, x0, y0
+
+    def non_linear_e_plain(self, state):
+        for i in range(len(state)):
+            state[i] = pow(state[i], self.d, self.p)
+        return state
+
+    @staticmethod
+    def get_lm_dot(state):
+        assert(len(state) == 4)
+        tmp = state[0] - state[3]
+        dot1 = tmp - state[1] + state[2]
+        dot2 = tmp + state[1] - state[2]
+
+        return dot1, dot2
+
+    def non_linear_i_plain(self, state):
+        dot1, dot2 = self.get_lm_dot(state)
+
+        dot1 = (dot1 * dot1) % self.p
+        sum_ = (dot1 + dot2) % self.p
+        prod = (sum_ * sum_) % self.p
+
+        for i in range(len(state)):
+            state[i] = (state[i] + prod) % self.p
+        return state
+
+    def non_linear_h_plain(self, state):
+        assert(len(state) == 8)
+        dot = state[0] + state[1] + state[2] + state[3] \
+            - state[4] - state[5] - state[6] - state[7]
+        dot = (dot * dot) % self.p
+
+        out = [(s + dot) % self.p for s in state]
+        return out
+
+    def non_linear_r_plain(self, y, z):
+        vy, wy = self.get_lm_dot(y)
+        wz, vz = self.get_lm_dot(z)
+
+        v = (vy * vz) % self.p
+        w = (wy * wz) % self.p
+
+        y = [(yi + v) % self.p for yi in y]
+        z = [(zi + w) % self.p for zi in z]
+
+        return y, z
+
+    def R_plain(self, state, i):
+        if i == 0:
+            return state
+
+        y = state[:4]
+        z = state[4:]
+
+        y, z = self.non_linear_r_plain(y, z)
+        y_perm = self.matrix_i_plain(self.Mi, y)
+        z_perm = self.matrix_i_plain(self.Mi, z)
+
+        state = self.vec_add_plain(self.concat(y_perm, z_perm), self.rc_r[i - 1])
+        return state
+
+    @staticmethod
+    def concat(a, b):
+        c = a.copy()
+        c.extend(b)
+        return c
+
+    def matrix_e_plain(self, state):
+        # multiplication by circ(3 2 1 1) is equal to state + state + rot(state) + sum(state)
+        sum_ = 0
+        for s in state:
+            sum_ = (sum_ + s) % self.p
+        state_rot = state[1:] + state[:1]
+
+        out = []
+        for i in range(len(state)):
+            out.append((sum_ + state_rot[i] + state[i] + state[i]) % self.p)
+        return out
+
+    def matrix_i_plain(self, mat, state):
+        t = len(state)
+        sum_ = sum(s for s in state) % self.p
+        out = [sum_] * t
+        out[0] = (out[0] + state[0] * mat[0][0]) % self.p
+        for i in range(1, t):
+            out[i] = (out[i] + state[0] * mat[i][0]) % self.p
+            tmp = (state[i] * mat[i][i]) % self.p
+            out[i] = (out[i] + tmp) % self.p
+        return out
+
+    def permutation_b_plain(self, state):
+        sum_ = [0] * 4
+
+        state = self.matrix_e_plain(state)
+        for i in range(self.Re_1):
+            state = self.non_linear_e_plain(state)
+            state = self.matrix_e_plain(state)
+            state = self.vec_add_plain(state, self.rc_b[i])
+            sum_ = self.vec_add_plain(sum_, state)
+        for i in range(self.Ri):
+            state = self.non_linear_i_plain(state)
+            state = self.matrix_i_plain(self.Mi, state)
+            state = self.vec_add_plain(state, self.rc_b[i + self.Re_1])
+            sum_ = self.vec_add_plain(sum_, state)
+        for i in range(self.Re_1, self.Re_1 + self.Re_2):
+            state = self.non_linear_e_plain(state)
+            state = self.matrix_e_plain(state)
+            state = self.vec_add_plain(state, self.rc_b[i + self.Ri])
+            if i < self.Re_1 + self.Re_2 - 1:
+                sum_ = self.vec_add_plain(sum_, state)
+        return state, sum_
+
+    def permutation_h_plain(self, state, K):
+        for r in range(self.Rh):
+            state = self.non_linear_h_plain(state)
+            state = self.matrix_i_plain(self.Mh, state)
+            state = self.vec_add_plain(state, self.rc_h[r])
+            state = self.vec_add_plain(state, K)
+        return state
+
+    def vec_add(self, vec1, vec2):
+        out = sint.Array(len(vec1))
+        for i in range(len(vec1)):
+            out[i] = vec1[i] + vec2[i]
+        return out
+
+    @staticmethod
+    def num_perms(t):
+        t_ = t // 8
+        t__ = t % 8
+
+        perms = t_
+        if t__ > 0:
+            perms = perms + 1
+        return perms
+
+    def compute_cube(self, x):
+        if self.use_squares:
+            r, rsq = sint.get_random_square()
+            r_cube = r * rsq
+            y = (x - r).reveal()
+            return 3 * y * rsq + 3 * y ** 2 * r + y ** 3 + r_cube
+        else:
+            return x * x * x
+
+    def sbox(self, x):
+        if self.d == 3:
+            return self.compute_cube(x)
+        else:
+            return x ** self.d
+
+    def non_linear_e(self, state):
+        for i in range(len(state)):
+            state[i] = self.sbox(state[i])
+        return state
+
+    def non_linear_i(self, state):
+        dot1, dot2 = self.get_lm_dot(state)
+
+        dot1 = dot1 * dot1
+        sum_ = dot1 + dot2
+        prod = (sum_ * sum_)
+
+        out = sint.Array(len(state))
+        for i in range(len(state)):
+            out[i] = state[i] + prod
+        return out
+
+    def non_linear_h(self, state):
+        assert(len(state) == 8)
+        dot = state[0] + state[1] + state[2] + state[3] \
+            - state[4] - state[5] - state[6] - state[7]
+        dot = dot * dot
+
+        out = sint.Array(len(state))
+        for i in range(len(state)):
+            out[i] = state[i] + dot
+        return out
+
+    def non_linear_r(self, y, z):
+        vy, wy = self.get_lm_dot(y)
+        wz, vz = self.get_lm_dot(z)
+
+        v = vy * vz
+        w = wy * wz
+
+        y = [yi + v for yi in y]
+        z = [zi + w for zi in z]
+
+        return y, z
+
+    def R(self, state, i):
+        if i == 0:
+            return state
+
+        y = state[:4]
+        z = state[4:]
+
+        y, z = self.non_linear_r(y, z)
+        y_perm = self.matrix_i(self.Mi, y)
+        z_perm = self.matrix_i(self.Mi, z)
+
+        state = self.vec_add(self.concat_sint(y_perm, z_perm), self.rc_r[i - 1])
+        return state
+
+    @staticmethod
+    def concat_sint(a, b):
+        out = sint.Array(len(a) + len(b))
+        out[:len(a)] = a
+        out[len(a):] = b
+        return out
+
+    def matrix_i(self, mat, state):
+        t = len(state)
+        sum_ = sum(s for s in state)
+
+        out = sint.Array(t)
+        out[0] = sum_ + state[0] * mat[0][0]
+        for i in range(1, t):
+            out[i] = sum_ + state[0] * mat[i][0]
+            tmp = state[i] * mat[i][i]
+            out[i] = out[i] + tmp
+        return out
+
+    def matrix_e(self, state):
+        # multiplication by circ(3 2 1 1) is equal to state + state + rot(state) + sum(state)
+        sum_ = 0
+        for s in state:
+            sum_ = sum_ + s
+        state_rot = sint.Array(len(state))
+        state_rot[:-1] = state[1:]
+        state_rot[-1:] = state[:1]
+
+        out = sint.Array(len(state))
+        for i in range(len(state)):
+           out[i] = sum_ + state_rot[i] + state[i] + state[i]
+        return out
+
+    def permutation_b(self, state):
+        sum_ = [0] * 4
+
+        state = self.matrix_e(state)
+        for i in range(self.Re_1):
+            state = self.non_linear_e(state)
+            state = self.matrix_e(state)
+            state = self.vec_add(state, self.rc_b[i])
+            sum_ = self.vec_add(state, sum_)
+        for i in range(self.Ri):
+            state = self.non_linear_i(state)
+            state = self.matrix_i(self.Mi, state)
+            state = self.vec_add(state, self.rc_b[i + self.Re_1])
+            sum_ = sum_ + state
+        for i in range(self.Re_1, self.Re_1 + self.Re_2):
+            state = self.non_linear_e(state)
+            state = self.matrix_e(state)
+            state = self.vec_add(state, self.rc_b[i + self.Ri])
+            if i < self.Re_1 + self.Re_2 - 1:
+                sum_ = sum_ + state
+        return state, sum_
+
+    def permutation_h(self, state, K):
+        for r in range(self.Rh):
+            state = self.non_linear_h(state)
+            state = self.matrix_i(self.Mh, state)
+            state = self.vec_add(state, self.rc_h[r])
+            state = state + K
+        return state
+
+    def vec_add_plain(self, vec1, vec2):
+        for i in range(len(vec1)):
+            vec1[i] = (vec1[i] + vec2[i]) % self.p
+        return vec1
+
+    def gen_ks_plain(self, t, K, IV, N):
+        assert(len(IV) == 3)
+        assert(len(K) == 4)
+        state = Hydra.concat([N], IV)
+        assert(len(state) == 4)
+        perms = Hydra.num_perms(t)
+        assert(self.perms >= perms) # enough rc
+
+        # first step
+        state = self.vec_add_plain(state, K)
+        state, z = self.permutation_b_plain(state)
+        state = self.vec_add_plain(state, K)
+
+        # second step
+        K_mat = self.matrix_e_plain(K)
+        K_ = Hydra.concat(K, K_mat)
+
+        keystream = []
+        perm_counter = -1
+        roll = Hydra.concat(state, z)
+        perm = None
+        for i in range(t):
+            off = i % 8
+            if off == 0:
+                perm_counter = perm_counter + 1
+                roll = self.R_plain(roll, perm_counter)
+                perm = self.permutation_h_plain(roll, K_)
+                perm = self.vec_add_plain(perm, roll) # feed forward
+            keystream.append(perm[off])
+
+        return keystream
+
+    def gen_ks(self, t, K, IV, N):
+        assert(len(IV) == 3)
+        assert(len(K) == 4)
+        state = Hydra.concat([N], IV)
+        assert(len(state) == 4)
+        perms = Hydra.num_perms(t)
+        assert(self.perms >= perms) # enough rc
+
+        # first step
+        state = self.vec_add(K, state)
+        state, z = self.permutation_b(state)
+        state = state + K
+
+        # second step
+        K_mat = self.matrix_e(K)
+        K_ = Hydra.concat_sint(K, K_mat)
+
+        rolls = []
+        roll = Hydra.concat_sint(state, z)
+        rolls.append(roll)
+        for i in range(1, perms):
+            rolls.append(self.R(rolls[i - 1], i))
+
+        perm = []
+        @for_range_parallel(perms, perms)
+        def _(i):
+            a = self.permutation_h(rolls[i], K_)
+            a = self.vec_add(a, rolls[i]) # feed forward
+            perm.append(a)
+
+        keystream = []
+        perm_counter = -1
+        for i in range(t):
+            off = i % 8
+            if off == 0:
+                perm_counter = perm_counter + 1
+            keystream.append(perm[perm_counter][off])
+        return keystream
+
+
+def plain(hydra, mk, iv, n, plaintext):
+    t = len(plaintext)
+    ks = hydra.gen_ks_plain(t, mk, iv, n)
+
+    ct = []
+    for i in range(t):
+        ct.append((ks[i] + plaintext[i]) % hydra.p)
+    return ct
+
+def shared(hydra, mk, iv, n, plaintext):
+    t = len(plaintext)
+    mk_ = sint.Array(4)
+    for i in range(4):
+        mk_[i] = sint(mk[i])
+    ks = hydra.gen_ks(t, mk_, iv, n)
+
+    ct = []
+    for i in range(t):
+        ct.append(ks[i] + plaintext[i])
+    return ct
+
+def reveal(shared):
+    res = []
+    for s in shared:
+        c = s.reveal()
+        res.append(c)
+    return res
+
+def compare(a, b):
+    if len(a) != len(b):
+        return False
+    t = len(a)
+    correct = cint(0)
+    for i in range(t):
+        correct = correct + a[i] - b[i]
+
+    @if_e(correct == 0)
+    def _():
+        print_ln("Correct")
+    @else_
+    def _():
+        print_ln("A Error occured!?")
+
+def main(t, use_squares):
+    N = 2
+    MK = [0, 0, 0, 0]
+    IV = [1, 1, 1]
+
+    p = program.prime
+    l = p.bit_length()
+    program.set_bit_length(l)
+    print_ln("Prime %s with %s-bit", p, l)
+    print_ln("Having %s plaintexts", t)
+
+    hydra = Hydra(p, 128, t, use_squares)
+    hydra.print_depth()
+
+    plaintext = [i for i in range(t)]
+    ct = plain(hydra, MK, IV, N, plaintext)
+
+    print_ln("Running MPC")
+    start_timer(1)
+    ct_ = shared(hydra, MK, IV, N, plaintext)
+    ct_ = reveal(ct_)
+    stop_timer(1)
+    compare(ct, ct_)
+
+# default
+t = 5
+use_squares = False
+
+args = len(program.args)
+if args > 1:
+    t = int(program.args[1])
+if args > 2:
+    use_squares = bool(int(program.args[2]))
+
+if program.prime == None:
+    print('Error: No prime provided')
+    exit()
+
+program.name = "hydra"
+print("Compiling: for")
+print("Prime = " + str(program.prime))
+print("t = " + str(t))
+print("Using Squares = " + str(use_squares))
+program.use_square(use_squares)
+main(t, use_squares)
