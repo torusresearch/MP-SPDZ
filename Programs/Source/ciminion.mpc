@@ -1,0 +1,312 @@
+
+from math import ceil, log2
+from Cryptodome.Hash import SHAKE256
+
+from Compiler.library import else_, for_range_parallel, if_e, print_ln, start_timer, stop_timer
+from Compiler import program
+from Compiler.types import *
+
+class Ciminion:
+    def __init__(self, p, kappa, mode = 1):
+        self.p = p
+        self.kappa = kappa
+        self.N, self.R = self.find_rounds(mode)
+        self.rc = self.gen_rc()
+        self.rc_e = self.rc[-self.R:]
+
+    def print_depth(self, t, shared_keyschedule):
+        l = ceil(t / 2)
+        l2 = 2 * l
+
+        # keyschedule
+        ks_depth = self.N * l2
+        ks_mul = self.N * l2
+        # Encryption
+        # just rounds
+        depth = self.N + self.R
+        mul = self.N + self.R * l
+        # adding roll:
+        depth = depth + l - 1
+        mul = mul + l - 1
+        # subtracting one multiplication/depth because state[0] = nonce in beginning!
+        mul = mul - 1
+        depth = depth - 1
+        ks_mul = ks_mul - 1
+        ks_depth = ks_depth - 1
+        # total depth
+        t_depth = ks_depth + self.R + 1
+
+        if shared_keyschedule:
+            mul = ks_mul + mul
+            depth = t_depth
+
+        print_ln("Expected:")
+        print_ln("  %s inverses", 0)
+        print_ln("  %s squares", 0)
+        print_ln("  %s muls", mul)
+        print_ln("  %s depth", depth + 1) # reveal included
+
+    def find_rounds(self, mode = 1):
+        # original implementation has N=134, R=10
+        assert(self.p >= 2^64)
+        assert(64 <= self.kappa)
+        assert(self.kappa <= self.p.bit_length())
+        if mode == 1:
+            # data limit 2^(s/2) elements
+            N = ceil(2 * (self.kappa + 6) / 3)
+            R = max(ceil((self.kappa + 37) / 12), 6)
+            return N, R
+        if mode == 2:
+            # conservative
+            N = self.kappa + 6
+            R = max(ceil(1.5 * (self.kappa + 37) / 12), 9)
+            return N, R
+        # standard
+        N = self.kappa + 6
+        R = max(ceil((self.kappa + 37) / 12), 6)
+        return N, R
+
+    def gen_rc(self):
+        bitlen = self.p.bit_length()
+        bytelen = ceil(bitlen / 8)
+        message = "GF({})".format(self.p)
+        shake = SHAKE256.new()
+        shake.update(message.encode('ascii'))
+        rc = []
+        for _ in range(self.N):
+            rc_ = []
+            for _ in range(4):
+                while True:
+                    tmp = shake.read(bytelen)
+                    # according to paper: reject if >= p,
+                    # but their implementation makes % p
+                    # tmp = int.from_bytes(tmp, byteorder='little') % p
+                    tmp = int.from_bytes(tmp, byteorder='little')
+                    if tmp < self.p:
+                        rc_.append(tmp)
+                        break
+            rc.append(rc_)
+        return rc
+
+    def round_function(self, state, rc):
+        if isinstance(state, list):
+            new_state = state.copy()
+        else:
+            new_state = sint.Array(3)
+        new_c = state[0] * state[1] + state[2]
+        new_b = new_c + state[1]
+        new_state[0] = new_c + rc[2]
+        new_state[1] = state[0] + rc[3] * new_b + rc[0]
+        new_state[2] = new_b + rc[1]
+        return new_state
+
+    def rounds(self, state, r, rc):
+        for i in range(r):
+            state = self.round_function(state, rc[i])
+        return state
+
+    def roll(self, state):
+        new_state = state.copy()
+        new_state[0] = state[0] * state[1] + state[2]
+        new_state[1] = state[0]
+        new_state[2] = state[1]
+        return new_state
+
+    def keyschedule(self, master_key, t):
+        l = ceil(t / 2)
+        l2 =  2 * l
+
+        keys = []
+        state = [1, master_key[0], master_key[1]]
+        for i in range(l2):
+            state = self.rounds(state, self.N, self.rc)
+            keys.append(state[0])
+        return keys
+
+    def gen_ks(self, keys, nonce):
+        n = len(keys)
+        l = ceil(n / 2)
+
+        # pc
+        state = [nonce, keys[0], keys[1]]
+        state = self.rounds(state, self.N, self.rc)
+
+        state_ins = sint.Matrix(l, 3)
+        state_ins[0] = state.copy()
+        for i in range(1, l):
+            state[0] += keys[2 * i + 1]
+            state[1] += keys[2 * i]
+            state = self.roll(state)
+            state_ins[i] = state.copy()
+
+        ks = []
+        @for_range_parallel(l, l)
+        def _(i):
+            ks_ = self.rounds(state_ins[i], self.R, self.rc_e)
+            ks.append(ks_[0])
+            ks.append(ks_[1])
+
+        return ks
+
+    def roll_plain(self, state):
+        new_state = state.copy()
+        new_state[0] = ((state[0] * state[1]) % self.p + state[2]) % self.p
+        new_state[1] = state[0]
+        new_state[2] = state[1]
+        return new_state
+
+    def round_function_plain(self, state, rc):
+        new_state = state.copy()
+        new_c = ((state[0] * state[1]) % self.p + state[2]) % self.p
+        new_b = (new_c + state[1]) % self.p
+        new_state[0] = (new_c + rc[2]) % self.p
+        new_state[1] = (state[0] + (rc[3] * new_b) % self.p + rc[0]) % self.p
+        new_state[2] = (new_b + rc[1]) % self.p
+        return new_state
+
+    def rounds_plain(self, state, r, rc):
+        for i in range(r):
+            state = self.round_function_plain(state, rc[i])
+        return state
+
+    def keyschedule_plain(self, master_key, t):
+        l = ceil(t / 2)
+        l2 =  2 * l
+
+        keys = []
+        state = [1, master_key[0], master_key[1]]
+        for i in range(l2):
+            state = self.rounds_plain(state, self.N, self.rc)
+            keys.append(state[0])
+        return keys
+
+    def gen_ks_plain(self, keys, nonce):
+        n = len(keys)
+        l = ceil(n / 2)
+
+        # pc
+        state = [nonce, keys[0], keys[1]]
+        state = self.rounds_plain(state, self.N, self.rc)
+
+        ks = []
+        for i in range(l):
+            ks_ = self.rounds_plain(state, self.R, self.rc_e)
+            ks.append(ks_[0])
+            ks.append(ks_[1])
+            if i < l - 1:
+                state[0] = (state[0] + keys[2 * i + 3]) % self.p
+                state[1] = (state[1] + keys[2 * i + 2]) % self.p
+                state = self.roll_plain(state)
+        return ks
+
+def plain(ciminion, mk, iv, plaintext):
+    t = len(plaintext)
+    rk = ciminion.keyschedule_plain(mk, t)
+    ks = ciminion.gen_ks_plain(rk, iv)
+
+    ct = []
+    for i in range(t):
+        ct.append((ks[i] + plaintext[i]) % ciminion.p)
+    return ct
+
+def shared(ciminion, mk, iv, plaintext):
+    t = len(plaintext)
+    mk_ = [sint(mk[0]), sint(mk[1])]
+    rk = ciminion.keyschedule(mk_, t)
+    ks = ciminion.gen_ks(rk, iv)
+
+    ct = []
+    for i in range(t):
+        ct.append(ks[i] + plaintext[i])
+    return ct
+
+def shared_wo_keyschedule(ciminion, mk, iv, plaintext):
+    t = len(plaintext)
+    rk = ciminion.keyschedule_plain(mk, t)
+    rk_ = []
+    for r in rk:
+        rk_.append(sint(r))
+    ks = ciminion.gen_ks(rk_, iv)
+
+    ct = []
+    for i in range(t):
+        ct.append(ks[i] + plaintext[i])
+    return ct
+
+def reveal(shared):
+    res = []
+    for s in shared:
+        c = s.reveal()
+        res.append(c)
+    return res
+
+def compare(a, b):
+    if len(a) != len(b):
+        return False
+    t = len(a)
+    correct = cint(0)
+    for i in range(t):
+        correct = correct + a[i] - b[i]
+
+    @if_e(correct == 0)
+    def _():
+        print_ln("Correct")
+    @else_
+    def _():
+        print_ln("A Error occured!?")
+
+def main(t, shared_keyschedule, use_squares):
+    IV = 1
+    MK = [0, 0]
+
+    p = program.prime
+    l = p.bit_length()
+    program.set_bit_length(l)
+    print_ln("Prime %s with %s-bit", p, l)
+    print_ln("Having %s plaintexts", t)
+
+    ciminion = Ciminion(p, 128, 1)
+    ciminion.print_depth(t, shared_keyschedule)
+
+    plaintext = [i for i in range(t)]
+    ct = plain(ciminion, MK, IV, plaintext)
+
+    if shared_keyschedule:
+        print_ln("Running MPC with Shared Keyschedule")
+        start_timer(1)
+        ct_ = shared(ciminion, MK, IV, plaintext)
+        ct_ = reveal(ct_)
+        stop_timer(1)
+        compare(ct, ct_)
+    else:
+        print_ln("Running MPC without Shared Keyschedule")
+        start_timer(1)
+        ct_ = shared_wo_keyschedule(ciminion, MK, IV, plaintext)
+        ct_ = reveal(ct_)
+        stop_timer(1)
+        compare(ct, ct_)
+
+# default
+t = 5
+shared_keyschedule = True
+use_squares = False
+
+args = len(program.args)
+if args > 1:
+    t = int(program.args[1])
+if args > 2:
+    use_squares = bool(int(program.args[2]))
+if args > 3:
+    shared_keyschedule = bool(int(program.args[3]))
+
+if program.prime == None:
+    print('Error: No prime provided')
+    exit()
+
+program.name = "ciminion"
+print("Compiling: for")
+print("Prime = " + str(program.prime))
+print("t = " + str(t))
+print("Shared KS = " + str(shared_keyschedule))
+program.use_square(use_squares)
+main(t, shared_keyschedule, use_squares)
