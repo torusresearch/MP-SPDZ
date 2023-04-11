@@ -1,3 +1,43 @@
+# MP-PRF (Fork of MP-SPDZ)
+
+This fork of [MP-SPDZ](https://github.com/data61/MP-SPDZ) is dedicated to exploring PRFs (pseudo-random functions) in the MPC (multi-party computation) setting.
+
+It contains the following PRF implementations from [MPC-ZOO](https://extgit.iaik.tugraz.at/krypto/mpc-zoo):
+
+- ciminion.mpc
+- gmimc.mpc
+- hades_mimc.mpc
+- hydra.mpc
+- mimc.mpc
+- rescue.mpc
+
+## Requirements
+
+In addition to the MP-SPDZ requirements described below, you need to install the [Cryptodome library](https://pycryptodome.readthedocs.io/en/latest/src/installation.html).
+```
+pip install pycryptodomex
+```
+
+## Setup
+
+Before running the tests, you need to setup the library.
+```
+make tldr
+make online
+make offline
+```
+
+## Testing
+
+To test the performance of a PRF implementation, run the following command.
+```
+./Scripts/compile-run.py -E [MPC-protocol] -P [Prime] [PRF]
+```
+For example, to run MiMC with Malicious Shamir over the prime field of order P, where P is the group order of curve secp256k1, run the following command.
+```
+./Scripts/compile-run.py -E mal-shamir -P 115792089237316195423570985008687907852837564279074904382605163141518161494337 mimc
+```
+
 # Multi-Protocol SPDZ [![Documentation Status](https://readthedocs.org/projects/mp-spdz/badge/?version=latest)](https://mp-spdz.readthedocs.io/en/latest/?badge=latest) [![Build Status](https://dev.azure.com/data61/MP-SPDZ/_apis/build/status/data61.MP-SPDZ?branchName=master)](https://dev.azure.com/data61/MP-SPDZ/_build/latest?definitionId=7&branchName=master) [![Gitter](https://badges.gitter.im/MP-SPDZ/community.svg)](https://gitter.im/MP-SPDZ/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 This is a software to benchmark various secure multi-party computation
