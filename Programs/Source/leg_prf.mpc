@@ -1,11 +1,11 @@
 from Compiler import instructions_base
 import sys
 
-program.bit_length = 128
-nparallel = int(sys.argv[2])
+# program.bit_length = 128
+# nparallel = int(sys.argv[2])
 
-instructions_base.set_global_vector_size(nparallel)
-PREPROC = True
+# instructions_base.set_global_vector_size(nparallel)
+PREPROC = False
 # To disable key-dependent pre-processing set PREPROC=False
 
 class KDPreprocessing(object):
@@ -84,8 +84,9 @@ class LegPRF(object):
             raise CompilerError('Invalid key length to Legendre PRF')
 
         nonsq = self.precomp
-        self.kd_pre = KDPreprocessing(num_calls, self.key, nonsq,
-            self.prf_bit_len)
+        if PREPROC:
+            self.kd_pre = KDPreprocessing(num_calls, self.key, nonsq,
+                self.prf_bit_len)
 
     def reset_kd_pre(self):
         self.kd_pre.reset()
@@ -187,3 +188,12 @@ class LegPRF(object):
             v = (ssq * self.key[i] + ssq * msg).reveal()
             res[i] = (v.legendre() + 1) / 2
         return res
+
+def main():
+    bit_len = 256
+    prf = LegPRF(0, bit_len)
+    m = cint(10)
+    c = prf.encrypt_clear_to_ss(m)
+    print(c.reveal())
+
+main()
