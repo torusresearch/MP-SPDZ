@@ -1,0 +1,38 @@
+from Compiler.types import *
+from Compiler.library import for_range
+from random import randint
+
+def key_gen(m: int, rand_cint):
+    a = cint.Matrix(m, m)
+    for i in range(m):
+        for j in range(m):
+            a[i][j] = rand_cint()
+
+    k = sint.Array(m)
+    @for_range(m)
+    def f(i):
+        k[i] = sint.get_random()
+    return a, k
+
+def eval(a: Matrix, k: Array, log2q: int, log2p: int):
+    r: sint = sum(a * k)
+    return r.round(log2q, log2p, nearest=True)
+
+def rand_cint_func(log2q: int):
+    return lambda: cint(randint(0, 2**log2q-1))
+
+def main():
+    n = 20
+    log2q = 12
+    log2p = 8
+    m = n * log2q
+    l = 256
+
+    print(f"Benchmarking Lattice PRF with: l={l}, m={m}, log2(q)={log2q}, log2(p)={log2p}")
+    
+    a, k = key_gen(m, rand_cint_func(log2q))
+
+    r = eval(a, k, log2q, log2p)
+    print("output =", r.reveal())
+
+main()
