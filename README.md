@@ -27,7 +27,7 @@ make online
 make offline
 ```
 
-## Testing
+## Benchmarking
 
 To test the performance of a PRF implementation, run the following command.
 ```
@@ -36,6 +36,15 @@ To test the performance of a PRF implementation, run the following command.
 For example, to run MiMC with Malicious Shamir over the prime field of order P, where P is the group order of curve secp256k1, run the following command.
 ```
 ./Scripts/compile-run.py -E mal-shamir -P 115792089237316195423570985008687907852837564279074904382605163141518161494337 mimc
+```
+
+### Separate preprocessing
+
+The following command sequence demonstrates benchmarking with separate preprocessing.
+```
+./compile.py mimc
+./Scripts/mal-shamir-offline.sh mimc
+./Scripts/mal-shamir.sh -F mimc
 ```
 
 # Multi-Protocol SPDZ [![Documentation Status](https://readthedocs.org/projects/mp-spdz/badge/?version=latest)](https://mp-spdz.readthedocs.io/en/latest/?badge=latest) [![Build Status](https://dev.azure.com/data61/MP-SPDZ/_apis/build/status/data61.MP-SPDZ?branchName=master)](https://dev.azure.com/data61/MP-SPDZ/_build/latest?definitionId=7&branchName=master) [![Gitter](https://badges.gitter.im/MP-SPDZ/community.svg)](https://gitter.im/MP-SPDZ/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
