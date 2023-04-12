@@ -1,0 +1,51 @@
+from Compiler.types import *
+from Compiler.library import for_range
+from random import randint
+
+def key_gen(m: int, rand_cint):
+    a0 = Matrix(m, m, cint)
+    a1 = Matrix(m, m, cint)
+    for i in range(m):
+        for j in range(m):
+            a0[i][j] = rand_cint()
+            a1[i][j] = rand_cint()
+
+    k = Array(m, sint)
+    @for_range(m)
+    def f(i):
+        k[i] = sint.get_random()
+    return a0, a1, k
+
+def prod(it):
+    """Compute the product of the elements of iterable `it`."""
+    return reduce(lambda acc, xi: acc * xi, it, next(it))
+
+def eval(a0: Matrix, a1: Matrix, k: Array, x: list[bool], log2q: int, log2p: int):
+    f = lambda b: a1 if b else a0
+    fx = map(f, x)
+    p = prod(fx)
+    r: sint = sum(p * k)
+    return r.round(log2q, log2p, nearest=True)
+
+def rand_cint_func(log2q: int):
+    return lambda: cint(randint(0, 2**log2q-1))
+
+def rand_bool():
+    return True if randint(0, 1) == 1 else False
+
+def main():
+    n = 8 # 16
+    log2q = 12
+    log2p = 8
+    m = n * log2q
+    l = 64 # 256
+
+    print(f"Benchmarking Lattice PRF with: l={l}, m={m}, log2(q)={log2q}, log2(p)={log2p}")
+    
+    a0, a1, k = key_gen(m, rand_cint_func(log2q))
+
+    x = list(rand_bool() for b in range(l))
+    r = eval(a0, a1, k, x, log2q, log2p)
+    print("output =", r.reveal())
+
+main()
