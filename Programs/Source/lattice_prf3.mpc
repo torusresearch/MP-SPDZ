@@ -2,7 +2,7 @@
 # Run with ./Scripts/compile-run.py -E mal-shamir -g 12 lattice_prf3
 
 from Compiler.types import *
-from Compiler.library import for_range
+from Compiler.library import for_range, print_ln
 from random import randint
 
 def key_gen(m: int, rand_cgf2n):
@@ -17,9 +17,9 @@ def key_gen(m: int, rand_cgf2n):
         k[i] = sgf2n.get_random_triple()[0]
     return a, k
 
-def eval(a: Matrix, k: Array, log2p: int):
+def eval(a: Matrix, k: Array, log2q: int, log2p: int):
     r: sgf2n = sum(a * k)
-    return r.right_shift(log2p)
+    return r.right_shift(log2q - log2p)
 
 def rand_cgf2n_func(log2q: int):
     return lambda: cgf2n(randint(0, 2**log2q-1))
@@ -35,7 +35,8 @@ def main():
     
     a, k = key_gen(m, rand_cgf2n_func(log2q))
 
-    r = eval(a, k, log2p)
-    print("output =", r.reveal())
+    r = eval(a, k, log2q, log2p)
+
+    print_ln("output = %s", r.reveal())
 
 main()
