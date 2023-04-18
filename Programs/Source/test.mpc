@@ -24,18 +24,19 @@ for i in range(m):
         a[i][j] = crand()
 
 k = sint.Array(m)
-@for_range(m)
-def f(i):
+for i in range(m):
     k[i] = srand()
 
 # Evaluation
-r: sint = sum(a * k)
-r = r.mod2m(log2q)
-r = r.right_shift(log2q - log2p)
-print_ln("r = %s", r.reveal())
+b = a * k
 
-# x: sint = sint.get_random_int(log2q)
-# y: sint = sint.get_random_int(log2q)
-# z = (x * y).mod2m(log2q).right_shift(log2q - log2p)
-# print_ln("z = x * y ; %s = %s * %s", z.reveal(), x.reveal(), y.reveal())
+l = program.bit_length // log2p
+
+for i in range(l):
+    b[i] = b[i].mod2m(log2q)
+    b[i] = b[i].right_shift(log2q - log2p)
+
+r = sum(2**(i*log2p) * b[i] for i in range(l))
+
+print_ln("r = %s", r.reveal())
 
