@@ -1,0 +1,13 @@
+from Compiler import program
+from Compiler.types import *
+from Compiler.library import for_range, print_ln
+
+log2q = 12
+log2p = 8
+
+x: sint = sint.get_random_int(log2q)
+y: sint = sint.get_random_int(log2q)
+
+z = (x * y).mod2m(log2p)
+print_ln("z = x * y ; %s = %s * %s", z.reveal(), x.reveal(), y.reveal())
+
