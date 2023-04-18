@@ -26,7 +26,7 @@ class BaseRing(Enum):
             return BaseRing.GF2N
         elif s == "Z2N":
             return BaseRing.Z2N
-        raise Exception(f"Paremeter {s} is not a valid base ring!")
+        raise Exception(f"Parameter {s} is not a valid base ring!")
 
 def raise_ring_unsupported():
     raise Exception(f"BASE_RING {BASE_RING} unsupported!")
