@@ -1,13 +1,41 @@
+from random import randint
+
 from Compiler import program
 from Compiler.types import *
 from Compiler.library import for_range, print_ln
 
 log2q = 12
 log2p = 8
+n = 20
+m = n * log2q
+print(f"m={m}, q=2^{log2q}, p=2^{log2p}")
 
-x: sint = sint.get_random_int(log2q)
-y: sint = sint.get_random_int(log2q)
+def crand() -> cint:
+    r = randint(0, 2**log2q-1)
+    return cint(r)
 
-z = (x * y).mod2m(log2p)
-print_ln("z = x * y ; %s = %s * %s", z.reveal(), x.reveal(), y.reveal())
+def srand() -> sint:
+    return sint.get_random_int(log2q)
+
+# Key generation
+a = cint.Matrix(m, m)
+for i in range(m):
+    for j in range(m):
+        a[i][j] = crand()
+
+k = sint.Array(m)
+@for_range(m)
+def f(i):
+    k[i] = srand()
+
+# Evaluation
+r: sint = sum(a * k)
+r = r.mod2m(log2q)
+r = r.right_shift(log2q - log2p)
+print_ln("r = %s", r.reveal())
+
+# x: sint = sint.get_random_int(log2q)
+# y: sint = sint.get_random_int(log2q)
+# z = (x * y).mod2m(log2q).right_shift(log2q - log2p)
+# print_ln("z = x * y ; %s = %s * %s", z.reveal(), x.reveal(), y.reveal())
 
