@@ -6,6 +6,7 @@
 #
 # For separate preprocessing, run one of the following:
 # BASE_RING=GF2N ./compile.py -g 12 lattice_prf && ./Scripts/mal-shamir-offline.sh lattice_prf && ./Scripts/mal-shamir.sh -F lattice_prf
+# BASE_RING=Z2N ./compile.py -R 12 lattice_prf && ./Fake-Offline.x 3 && ./Scripts/mal-rep-ring.sh -F lattice_prf
 # BASE_RING=ZP ./compile.py -F 256 lattice_prf && ./Scripts/mal-shamir-offline.sh lattice_prf && ./Scripts/mal-shamir.sh -F lattice_prf
 
 import os
