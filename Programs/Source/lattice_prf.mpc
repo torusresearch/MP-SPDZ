@@ -42,7 +42,10 @@ n = 20
 log2q = 12
 log2p = 8
 m = n * log2q
-l = program.bit_length // log2p
+
+# Compute how many p-bit values we need to generate random element in base ring.
+stat = 40 # statistical distance
+l = (program.bit_length + stat) // log2p # number of p-bit values
 
 print(f"base={BASE_RING_VAL}, m={m}, q=2^{log2q}, p=2^{log2p}")
 
