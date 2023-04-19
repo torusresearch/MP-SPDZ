@@ -6,7 +6,7 @@
 #
 # For separate preprocessing, run one of the following:
 # BASE_RING=GF2N ./compile.py -g 12 lattice_prf && ./Scripts/mal-shamir-offline.sh lattice_prf && ./Scripts/mal-shamir.sh -F lattice_prf
-# BASE_RING=Z2N ./compile.py -R 12 lattice_prf && ./Fake-Offline.x 3 && ./Scripts/mal-rep-ring.sh -F lattice_prf
+# BASE_RING=Z2N ./compile.py -R 12 lattice_prf && ./Fake-Offline.x 3 -lgp 12 && ./Scripts/mal-rep-ring.sh -F lattice_prf
 # BASE_RING=ZP ./compile.py -F 256 lattice_prf && ./Scripts/mal-shamir-offline.sh lattice_prf && ./Scripts/mal-shamir.sh -F lattice_prf
 
 import os
@@ -95,6 +95,16 @@ def round(s: sint):
         return s.mod2m(log2q).right_shift(log2q - log2p)
     raise_ring_unsupported()
 
+def compose(a: Array) -> sint:
+    l = len(a)
+    if BASE_RING == BaseRing.GF2N:
+        return sum(a[i] << i*log2p for i in range(l))
+    elif BASE_RING == BaseRing.Z2N:
+        return sum(a[i] << (i*log2p % log2q) for i in range(l))
+    elif BASE_RING == BaseRing.ZP:
+        return sum(a[i] << i*log2p for i in range(l))
+    raise_ring_unsupported()
+
 def key_gen(m: int):
     a = Matrix(l, m, ctype())
     for i in range(l):
@@ -110,7 +120,7 @@ def eval(a: Matrix, k: Array):
     r = a * k
     for i in range(l):
         r[i] = round(r[i])
-    r = sum(2**(i*log2p) * r[i] for i in range(l))
+    r = compose(r)
     return r
 
 def main():    
