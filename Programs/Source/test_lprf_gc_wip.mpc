@@ -1,0 +1,53 @@
+from random import randint
+
+from Compiler import program
+# from Compiler.types import *
+from Compiler.GC.types import *
+from Compiler.library import for_range, print_ln
+
+# b = sbits.get_random_bit()
+# bits = [sbits.get_random_bit() for i in range(40)]
+# r = sbits.bit_compose(bits)
+# # test(r * sbit(1) + sbit(1) * r, 0)
+
+# print("type(r) =", type(r))
+# print("len(r) =", len(r))
+# print_ln("r = %s", r.reveal())
+
+log2q = 12
+log2p = 8
+n = 20
+m = n * log2q
+print(f"m={m}, q=2^{log2q}, p=2^{log2p}")
+
+def crand() -> cbits:
+    r = randint(0, 2**log2q-1)
+    return cbits(r)
+
+def srand() -> sbits:
+    bits = [sbits.get_random_bit() for i in range(log2q)]
+    return sbits.bit_compose(bits)
+
+l = log2q // log2p
+
+# Key generation
+a = cbits.Matrix(l, m)
+for i in range(l):
+    for j in range(m):
+        a[i][j] = crand()
+
+k = sbits.Array(m)
+for i in range(m):
+    k[i] = srand()
+
+# Evaluation
+b = a * k
+
+for i in range(l):
+    b[i] = b[i].mod2m(log2q)
+    b[i] = b[i].right_shift(log2q - log2p)
+
+r = sum(2**(i*log2p) * b[i] for i in range(l))
+
+print_ln("r = %s", r.reveal())
+
