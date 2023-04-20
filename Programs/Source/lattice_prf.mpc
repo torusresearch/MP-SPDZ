@@ -19,35 +19,39 @@ from Compiler.library import print_ln
 from enum import Enum
 
 class BaseRing(Enum):
-    GF2N = 1
-    Z2N = 2
-    ZP = 3
+    GF2N = "GF2N"
+    Z2N = "Z2N"
+    ZP = "ZP"
 
     @staticmethod
     def parse(s: str):
-        if s == "GF2N":
+        if s == BaseRing.GF2N.value:
             return BaseRing.GF2N
-        elif s == "Z2N":
+        elif s == BaseRing.Z2N.value:
             return BaseRing.Z2N
-        elif s == "ZP":
+        elif s == BaseRing.ZP.value:
             return BaseRing.ZP
         raise Exception(f"Parameter {s} is not a valid base ring!")
 
 def raise_ring_unsupported():
     raise Exception(f"BASE_RING {BASE_RING} unsupported!")
 
-BASE_RING_VAL = os.environ.get("BASE_RING", "GF2N")
-BASE_RING = BaseRing.parse(BASE_RING_VAL)
-n = 20
+BASE_RING = BaseRing.parse(os.environ.get("BASE_RING", "GF2N"))
+BITS = int(os.environ.get("BITS", 256)) # Number of random bits to produce.
+COMPOSE = bool(os.environ.get("COMPOSE", False)) # Compose PRF output into single base ring element.
+REVEAL = bool(os.environ.get("REVEAL", False)) # Reval output.
+
 log2q = 12
 log2p = 8
-m = n * log2q
+m = 256
+l = BITS // log2p
 
-# Compute how many p-bit values we need to generate random element in base ring.
-stat = 40 # statistical distance
-l = (program.bit_length + stat) // log2p # number of p-bit values
+if COMPOSE:
+    # Compute how many p-bit values we need to generate random element in base ring.
+    stat = 40 # statistical distance
+    l = (program.bit_length + stat) // log2p # number of p-bit values
 
-print(f"base={BASE_RING_VAL}, m={m}, q=2^{log2q}, p=2^{log2p}")
+print(f"base={BASE_RING.value}, q=2^{log2q}, p=2^{log2p}, m={m}, l={l}")
 
 def crand():
     r = randint(0, 2**log2q-1)
@@ -120,12 +124,14 @@ def eval(a: Matrix, k: Array):
     r = a * k
     for i in range(l):
         r[i] = round(r[i])
-    r = compose(r)
+    if COMPOSE:
+        r = compose(r)
     return r
 
 def main():    
     a, k = key_gen(m)
     r = eval(a, k)
-    print_ln("output = %s", r.reveal())
+    if REVEAL:
+        print_ln("output = %s", r.reveal())
 
 main()
