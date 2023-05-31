@@ -36,13 +36,15 @@ class BaseRing(Enum):
 def raise_ring_unsupported():
     raise Exception(f"BASE_RING {BASE_RING} unsupported!")
 
-BASE_RING = BaseRing.parse(os.environ.get("BASE_RING", "GF2N"))
+BASE_RING = BaseRing.parse(os.environ.get("BASE_RING", "GFP"))
 BITS = int(os.environ.get("BITS", 256)) # Number of random bits to produce.
 COMPOSE = bool(os.environ.get("COMPOSE", False)) # Compose PRF output into single base ring element.
 REVEAL = bool(os.environ.get("REVEAL", False)) # Reval output.
 
-log2q = 12
-log2p = 8
+# log2q = 12
+# log2p = 8
+log2q = 32
+log2p = 24
 m = 256
 l = BITS // log2p
 
