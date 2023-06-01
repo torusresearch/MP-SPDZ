@@ -1,11 +1,9 @@
 ### Lattice PRF
 # Run with one of the following commands:
-# BASE_RING=GF2N ./Scripts/compile-run.py -E mal-shamir -g 12 lattice_prf
 # BASE_RING=Z2N ./Scripts/compile-run.py -E mal-rep-ring -R 12 lattice_prf
 # BASE_RING=GFP ./Scripts/compile-run.py -E mal-shamir -F 256 lattice_prf
 #
 # For separate preprocessing, run one of the following:
-# BASE_RING=GF2N ./compile.py -g 12 lattice_prf && ./Scripts/mal-shamir-offline.sh lattice_prf && ./Scripts/mal-shamir.sh -F lattice_prf
 # BASE_RING=Z2N ./compile.py -R 12 lattice_prf && ./Fake-Offline.x 3 -lgp 12 && ./Scripts/mal-rep-ring.sh -F lattice_prf
 # BASE_RING=GFP ./compile.py -F 256 lattice_prf && ./Scripts/mal-shamir-offline.sh lattice_prf && ./Scripts/mal-shamir.sh -F lattice_prf
 
@@ -19,15 +17,12 @@ from Compiler.library import print_ln
 from enum import Enum
 
 class BaseRing(Enum):
-    GF2N = "GF2N"
     Z2N = "Z2N"
     GFP = "GFP"
 
     @staticmethod
     def parse(s: str):
-        if s == BaseRing.GF2N.value:
-            return BaseRing.GF2N
-        elif s == BaseRing.Z2N.value:
+        if s == BaseRing.Z2N.value:
             return BaseRing.Z2N
         elif s == BaseRing.GFP.value:
             return BaseRing.GFP
@@ -57,45 +52,35 @@ print(f"base={BASE_RING.value}, q=2^{log2q}, p=2^{log2p}, m={m}, l={l}")
 
 def crand():
     r = randint(0, 2**log2q-1)
-    if BASE_RING == BaseRing.GF2N:
-        return cgf2n(r)
-    elif BASE_RING == BaseRing.Z2N:
+    if BASE_RING == BaseRing.Z2N:
         return cint(r)
     elif BASE_RING == BaseRing.GFP:
         return cint(r)
     raise_ring_unsupported()
 
 def srand():
-    if BASE_RING == BaseRing.GF2N:
-        return sgf2n.get_random_triple()[0]
-    elif BASE_RING == BaseRing.Z2N:
+    if BASE_RING == BaseRing.Z2N:
         return sint.get_random()
     elif BASE_RING == BaseRing.GFP:
         return sint.get_random_int(log2q)
     raise_ring_unsupported()
 
 def ctype():
-    if BASE_RING == BaseRing.GF2N:
-        return cgf2n
-    elif BASE_RING == BaseRing.Z2N:
+    if BASE_RING == BaseRing.Z2N:
         return cint
     elif BASE_RING == BaseRing.GFP:
         return cint
     raise_ring_unsupported()
 
 def stype():
-    if BASE_RING == BaseRing.GF2N:
-        return sgf2n
-    elif BASE_RING == BaseRing.Z2N:
+    if BASE_RING == BaseRing.Z2N:
         return sint
     elif BASE_RING == BaseRing.GFP:
         return sint
     raise_ring_unsupported()
 
 def round(s: sint):
-    if BASE_RING == BaseRing.GF2N:
-        return s.right_shift(log2q - log2p)
-    elif BASE_RING == BaseRing.Z2N:
+    if BASE_RING == BaseRing.Z2N:
         return s.right_shift(log2q - log2p)
     elif BASE_RING == BaseRing.GFP:
         return s.mod2m(log2q).right_shift(log2q - log2p)
@@ -103,9 +88,7 @@ def round(s: sint):
 
 def compose(a: Array) -> sint:
     l = len(a)
-    if BASE_RING == BaseRing.GF2N:
-        return sum(a[i] << i*log2p for i in range(l))
-    elif BASE_RING == BaseRing.Z2N:
+    if BASE_RING == BaseRing.Z2N:
         return sum(a[i] << (i*log2p % log2q) for i in range(l))
     elif BASE_RING == BaseRing.GFP:
         return sum(a[i] << i*log2p for i in range(l))
