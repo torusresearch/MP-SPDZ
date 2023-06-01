@@ -31,24 +31,30 @@ class BaseRing(Enum):
 def raise_ring_unsupported():
     raise Exception(f"BASE_RING {BASE_RING} unsupported!")
 
+def parse_bool(s: str) -> bool:
+    return bool(int(s))
+
 BASE_RING = BaseRing.parse(os.environ.get("BASE_RING", "GFP"))
 BITS = int(os.environ.get("BITS", 256)) # Number of random bits to produce.
-COMPOSE = bool(os.environ.get("COMPOSE", False)) # Compose PRF output into single base ring element.
-REVEAL = bool(os.environ.get("REVEAL", False)) # Reval output.
+KEYGEN = parse_bool(os.environ.get("KEYGEN", True)) # Run key generation.
+COMPOSE = parse_bool(os.environ.get("COMPOSE", False)) # Compose PRF output into single base ring element.
+REVEAL = parse_bool(os.environ.get("REVEAL", False)) # Reval output.
 
-# log2q = 12
-# log2p = 8
-log2q = 32
-log2p = 24
+log2q = 12
+log2p = 8
+# log2q = 32
+# log2p = 24
 m = 256
 l = BITS // log2p
 
 if COMPOSE:
-    # Compute how many p-bit values we need to generate random element in base ring.
+    # Compute how many p-bit values we need to generate a random element in the
+    # base ring.
     stat = 40 # statistical distance
     l = (program.bit_length + stat) // log2p # number of p-bit values
 
-print(f"base={BASE_RING.value}, q=2^{log2q}, p=2^{log2p}, m={m}, l={l}")
+print(f"ring={BASE_RING.value}, q=2^{log2q}, p=2^{log2p}, m={m}, l={l}")
+print(f"KEYGEN={KEYGEN}, COMPOSE={COMPOSE}, REVEAL={REVEAL}")
 
 def crand():
     r = randint(0, 2**log2q-1)
@@ -102,7 +108,10 @@ def key_gen(m: int):
 
     k = Array(m, stype())
     for i in range(m):
-        k[i] = srand()
+        if KEYGEN:
+            k[i] = srand()
+        else:
+            k[i] = stype()(crand())
     return a, k
 
 def eval(a: Matrix, k: Array):
