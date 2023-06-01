@@ -39,11 +39,12 @@ BITS = int(os.environ.get("BITS", 256)) # Number of random bits to produce.
 KEYGEN = parse_bool(os.environ.get("KEYGEN", True)) # Run key generation.
 COMPOSE = parse_bool(os.environ.get("COMPOSE", False)) # Compose PRF output into single base ring element.
 REVEAL = parse_bool(os.environ.get("REVEAL", False)) # Reval output.
+LOG2Q = int(os.environ.get("LOG2Q", 12))
+LOG2P = int(os.environ.get("LOG2P", 8))
 
-log2q = 12
-log2p = 8
-# log2q = 32
-# log2p = 24
+log2q, log2p = LOG2Q, LOG2P
+# log2q, log2p = 12, 8
+# log2q, log2p = 32, 24
 m = 256
 l = BITS // log2p
 
