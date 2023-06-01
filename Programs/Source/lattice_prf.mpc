@@ -3,9 +3,15 @@
 # BASE_RING=Z2N ./Scripts/compile-run.py -E mal-rep-ring -R 12 lattice_prf
 # BASE_RING=GFP ./Scripts/compile-run.py -E mal-shamir -F 256 lattice_prf
 #
-# For separate preprocessing, run one of the following:
+# For separate preprocessing:
 # BASE_RING=Z2N ./compile.py -R 12 lattice_prf && ./Fake-Offline.x 3 -lgp 12 && ./Scripts/mal-rep-ring.sh -F lattice_prf
 # BASE_RING=GFP ./compile.py -F 256 lattice_prf && ./Scripts/mal-shamir-offline.sh lattice_prf && ./Scripts/mal-shamir.sh -F lattice_prf
+#
+# As a single command:
+# BASE_RING=GFP ./Scripts/run-lattice-prf.sh
+#
+# Setting parameters:
+# BASE_RING=GFP LOG2Q=12 LOG2P=8 KEYGEN=0 COMPOSE=1 BIT_LENGTH=216 ./Scripts/run-lattice-prf.sh
 
 import os
 from random import randint
