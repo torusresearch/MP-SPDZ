@@ -1,16 +1,16 @@
 ### Lattice PRF
 # Run with one of the following commands:
 # BASE_RING=Z2N ./Scripts/compile-run.py -E mal-rep-ring -R 12 lattice_prf
-# BASE_RING=GFP ./Scripts/compile-run.py -E mal-shamir -F 256 lattice_prf
+# BASE_RING=GFP ./Scripts/compile-run.py -E mal-shamir -F 128 lattice_prf
 #
 # For separate preprocessing:
 # BASE_RING=Z2N ./compile.py -R 12 lattice_prf && ./Fake-Offline.x 3 -lgp 12 && ./Scripts/mal-rep-ring.sh -F lattice_prf
-# BASE_RING=GFP ./compile.py -F 256 lattice_prf && ./Scripts/mal-shamir-offline.sh lattice_prf && ./Scripts/mal-shamir.sh -F lattice_prf
+# BASE_RING=GFP ./compile.py -F 128 lattice_prf && ./Scripts/mal-shamir-offline.sh -lgp 256 lattice_prf && ./Scripts/mal-shamir.sh -F lattice_prf
 #
 # As a single command:
 # BASE_RING=GFP ./Scripts/run-lattice-prf.sh
 #
-# Setting parameters:
+# Adjusting parameters:
 # LOG2Q=12 LOG2P=8 BIT_LENGTH=32 BASE_RING=GFP KEYGEN=0 COMPOSE=1 ./Scripts/run-lattice-prf.sh
 # LOG2Q=32 LOG2P=24 BIT_LENGTH=72 BASE_RING=GFP KEYGEN=0 COMPOSE=1 ./Scripts/run-lattice-prf.sh
 
