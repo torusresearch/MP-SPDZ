@@ -138,21 +138,32 @@ def key_gen(m: int):
 def eval(a: Matrix, k: Array):
     r = a * k
     if OPTIMIZE:
-        # Cut off bottom bits.
-        r[0] = r[0].right_shift(log2q - log2p)
+        # Instead of rounding each element of `r` at the top and the bottom, we
+        # only round the bottom and top of the vector and then compose the
+        # elements such that the uniform bits overlap (and therefore hide) the
+        # non-uniform bits.
         
-        # Cut off top bits. `n` is the number of elements we need to cut off the
-        # top bits in order to hide the top bits of the n-1 last element.
+        # Cut off top bits. `n_top` is the number of elements from which we need
+        # to cut off the top bits in order to hide the top bits of the preceding
+        # element.
         top_bits = log2q + l.bit_length()
-        n = top_bits // log2p + 1
-        for i in range(n):
+        n_top = top_bits // log2p + 1
+        for i in range(n_top):
             r[-i-1] = r[-i-1].mod2m(log2q)
-            
-        if log2p < log2q-log2p:
-            raise Exception("log2q-log2p must not be greater than log2p!")
+        
+        # Cut off bottom bits. `n_bot` is the number of elements from which we
+        # need to cut off the bottom bits in order to hide the bottom bits of
+        # the next element.
+        bot_bits = log2q - log2p
+        n_bot = bot_bits // log2p + 1
+        for i in range(n_bot):
+            r[i] = r[i].right_shift(log2q - log2p)
 
+        # Compose the elements into one uniform random value by layering uniform
+        # bits on top of non-uniform bits. Account for the fact the bottom bits
+        # of the elements starting from `n_bot` are not cut off.
         r = sum(
-            ri if i==0 else ri << i*log2p-(log2q-log2p)
+            ri << i*log2p - (0 if i<n_bot else log2q-log2p)
             for i, ri in enumerate(r))
     else:
         for i in range(l):
