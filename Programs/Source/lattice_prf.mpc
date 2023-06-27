@@ -48,6 +48,10 @@ COMPOSE = parse_bool(os.environ.get("COMPOSE", False)) # Compose PRF output into
 REVEAL = parse_bool(os.environ.get("REVEAL", False)) # Reval output.
 LOG2Q = int(os.environ.get("LOG2Q", 12))
 LOG2P = int(os.environ.get("LOG2P", 8))
+OPTIMIZE = parse_bool(os.environ.get("OPTIMIZE", False)) # Enable optimization.
+
+if OPTIMIZE and BASE_RING != BaseRing.GFP:
+    raise Exception("OPTIMIZE only supported for GFP!")
 
 log2q, log2p = LOG2Q, LOG2P
 # log2q, log2p = 12, 8
@@ -62,7 +66,7 @@ if COMPOSE:
     l = (BITS + stat) // log2p # number of p-bit values
 
 print(f"ring={BASE_RING.value}, q=2^{log2q}, p=2^{log2p}, m={m}, l={l}")
-print(f"KEYGEN={KEYGEN}, COMPOSE={COMPOSE}, REVEAL={REVEAL}")
+print(f"KEYGEN={KEYGEN}, COMPOSE={COMPOSE}, REVEAL={REVEAL}, OPTIMIZE={OPTIMIZE}")
 
 def crand():
     r = randint(0, 2**log2q-1)
@@ -93,11 +97,20 @@ def stype():
         return sint
     raise_ring_unsupported()
 
+def mod(s: sint):
+    """Modulo q."""
+    if BASE_RING == BaseRing.Z2N:
+        return s # already mod 2^log2q
+    elif BASE_RING == BaseRing.GFP:
+        return s.mod2m(log2q)
+    raise_ring_unsupported()
+
 def round(s: sint):
+    """Round to nearest p-bit value."""
     if BASE_RING == BaseRing.Z2N:
         return s.right_shift(log2q - log2p)
     elif BASE_RING == BaseRing.GFP:
-        return s.mod2m(log2q).right_shift(log2q - log2p)
+        return s.right_shift(log2q - log2p)
     raise_ring_unsupported()
 
 def compose(a: Array) -> sint:
@@ -124,10 +137,28 @@ def key_gen(m: int):
 
 def eval(a: Matrix, k: Array):
     r = a * k
-    for i in range(l):
-        r[i] = round(r[i])
-    if COMPOSE:
-        r = compose(r)
+    if OPTIMIZE:
+        # Cut off bottom bits.
+        r[0] = r[0].right_shift(log2q - log2p)
+        
+        # Cut off top bits. `n` is the number of elements we need to cut off the
+        # top bits in order to hide the top bits of the n-1 last element.
+        top_bits = log2q + l.bit_length()
+        n = top_bits // log2p + 1
+        for i in range(n):
+            r[-i-1] = r[-i-1].mod2m(log2q)
+            
+        if log2p < log2q-log2p:
+            raise Exception("log2q-log2p must not be greater than log2p!")
+
+        r = sum(
+            ri if i==0 else ri << i*log2p-(log2q-log2p)
+            for i, ri in enumerate(r))
+    else:
+        for i in range(l):
+            r[i] = round(mod(r[i]))
+        if COMPOSE:
+            r = compose(r)
     return r
 
 def main():    
