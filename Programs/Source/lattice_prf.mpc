@@ -1,11 +1,13 @@
+#TODO Remove Z2N support?
+
 ### Lattice PRF
 # Run with one of the following commands:
-# BASE_RING=Z2N ./Scripts/compile-run.py -E mal-rep-ring -R 12 lattice_prf
-# BASE_RING=GFP ./Scripts/compile-run.py -E mal-shamir -F 128 lattice_prf
+# BASE_RING=Z2N ./Scripts/compile-run.py -O -E mal-rep-ring -R 12 lattice_prf
+# BASE_RING=GFP ./Scripts/compile-run.py -O -E mal-shamir -F 32 -g 256 lattice_prf
 #
 # For separate preprocessing:
-# BASE_RING=Z2N ./compile.py -R 12 lattice_prf && ./Fake-Offline.x 3 -lgp 12 && ./Scripts/mal-rep-ring.sh -F lattice_prf
-# BASE_RING=GFP ./compile.py -F 128 -O lattice_prf && ./Scripts/mal-shamir-offline.sh -lgp 256 lattice_prf && ./Scripts/mal-shamir.sh -F lattice_prf
+# BASE_RING=Z2N ./compile.py -O -R 12 lattice_prf && ./Fake-Offline.x 3 -lgp 12 && ./Scripts/mal-rep-ring.sh -F lattice_prf
+# BASE_RING=GFP ./compile.py -O -F 32 lattice_prf && ./Scripts/mal-shamir-offline.sh -lgp 256 lattice_prf && ./Scripts/mal-shamir.sh -F lattice_prf
 #
 # As a single command:
 # BASE_RING=GFP ./Scripts/run-lattice-prf.sh
@@ -43,8 +45,8 @@ def parse_bool(s: str) -> bool:
 
 BASE_RING = BaseRing.parse(os.environ.get("BASE_RING", "GFP"))
 BITS = int(os.environ.get("BITS", 256)) # Number of random bits to produce.
-KEYGEN = parse_bool(os.environ.get("KEYGEN", True)) # Run key generation.
-COMPOSE = parse_bool(os.environ.get("COMPOSE", False)) # Compose PRF output into single base ring element.
+KEYGEN = parse_bool(os.environ.get("KEYGEN", False)) # Run key generation.
+COMPOSE = parse_bool(os.environ.get("COMPOSE", True)) # Compose PRF output into single base ring element.
 REVEAL = parse_bool(os.environ.get("REVEAL", False)) # Reval output.
 LOG2Q = int(os.environ.get("LOG2Q", 12))
 LOG2P = int(os.environ.get("LOG2P", 8))
@@ -56,7 +58,7 @@ if OPTIMIZE and BASE_RING != BaseRing.GFP:
 log2q, log2p = LOG2Q, LOG2P
 # log2q, log2p = 12, 8
 # log2q, log2p = 32, 24
-m = 256
+m = 512
 l = BITS // log2p
 
 if COMPOSE:

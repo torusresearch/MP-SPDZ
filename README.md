@@ -42,9 +42,11 @@ For example, to run MiMC with Malicious Shamir over the prime field of order P, 
 
 The following command sequence demonstrates benchmarking with separate preprocessing.
 ```
-./compile.py mimc
-./Scripts/mal-shamir-offline.sh mimc
-./Scripts/mal-shamir.sh -F mimc
+PROG=mimc
+PRIME=21888242871839275222246405745257275088548364400416034343698204186575808495617
+./compile.py -O -P $PRIME $PROG \
+&& ./Scripts/mal-shamir-offline.sh $PROG \
+&& ./Scripts/mal-shamir.sh -F $PROG
 ```
 
 # Multi-Protocol SPDZ [![Documentation Status](https://readthedocs.org/projects/mp-spdz/badge/?version=latest)](https://mp-spdz.readthedocs.io/en/latest/?badge=latest) [![Build Status](https://dev.azure.com/data61/MP-SPDZ/_apis/build/status/data61.MP-SPDZ?branchName=master)](https://dev.azure.com/data61/MP-SPDZ/_build/latest?definitionId=7&branchName=master) [![Gitter](https://badges.gitter.im/MP-SPDZ/community.svg)](https://gitter.im/MP-SPDZ/community?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
