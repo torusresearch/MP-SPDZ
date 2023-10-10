@@ -1,0 +1,104 @@
+### Optimized Lattice PRF
+#
+# Compile and run:
+#   ./Scripts/compile-run.py -O -E mal-shamir -F 32 -g 256 lattice_prf_opt
+#
+# Compile and run with separate preprocessing:
+#   PROG=lattice_prf_opt && ./compile.py -O -F 32 -g 256 $PROG && ./Scripts/mal-shamir-offline.sh -lgp 256 $PROG && ./Scripts/mal-shamir.sh -F $PROG
+#
+# Compile and run with a single command and adjusted parameters:
+#   PROG=lattice_prf_opt LOG2Q=12 LOG2P=8 INT_SIZE=32 ./Scripts/run-lattice-prf.sh
+#   PROG=lattice_prf_opt LOG2Q=32 LOG2P=24 INT_SIZE=72 ./Scripts/run-lattice-prf.sh
+
+import os
+from random import randint
+
+from Compiler.types import *
+from Compiler.library import print_ln
+
+from enum import Enum
+
+def parse_bool(s: str) -> bool:
+    return bool(int(s))
+
+BITS = int(os.environ.get("BITS", 256)) # Number of random bits to produce.
+KEYGEN = parse_bool(os.environ.get("KEYGEN", False)) # Run key generation.
+REVEAL = parse_bool(os.environ.get("REVEAL", False)) # Reval output.
+LOG2Q = int(os.environ.get("LOG2Q", 12)) # Lattice modulus bitlength.
+LOG2P = int(os.environ.get("LOG2P", 8)) # Rounding modulus bitlength.
+DIM = int(os.environ.get("DIM", 512)) # Lattice dimension.
+DOUBLE = parse_bool(os.environ.get("DOUBLE", False)) # Run evaluation twice.
+
+log2q = LOG2Q # Lattice modulus.
+log2p = LOG2P # Rounding modulus.
+m = DIM # Lattice dimension
+
+# Compute how many p-bit elements we need to generate a random element in the
+# base ring.
+stat = 40 # Controls the statistical distance to the uniform distribution.
+l = math.ceil((BITS + stat) / log2p) # Number of p-bit elements required to fill up the target range.
+
+print(f"q=2^{log2q}, p=2^{log2p}, m={m}, l={l}")
+print(f"KEYGEN={KEYGEN}, REVEAL={REVEAL}, DOUBLE={DOUBLE}")
+
+def crand():
+    r = randint(0, 2**log2q-1)
+    return cint(r)
+
+def srand():
+    return sint.get_random_int(log2q)
+
+def mod(s: sint):
+    """Reduce modulo q."""
+    return s.mod2m(log2q)
+
+def round(s: sint):
+    """Round to nearest p-bit value."""
+    return s.right_shift(log2q - log2p)
+
+def compose(a: Array) -> sint:
+    l = len(a)
+    log2_p1 = log2q - log2p
+    log2_p2 = 2 * log2p - log2q
+    def shift(i):
+        p1_shift = (i - 1) * log2_p1
+        p2_shift = i * log2_p2
+        return max(0, p1_shift + p2_shift)
+    return sum(a[i] << shift(i) for i in range(l))
+
+def key_gen(m: int) -> (Array, Matrix):
+    a = Array(m, cint)
+    for i in range(m):
+        a[i] = crand()
+
+    k = Matrix(l, m, sint)
+    for i in range(l):
+        for j in range(m):
+            k[i][j] = srand() if KEYGEN else sint(crand())
+    
+    return a, k
+
+def eval(a: Array, k: Matrix):
+    r =  k * a
+    
+    # Modulo q.
+    for i in range(l):
+        r[i] = mod(r[i])
+    
+    # Round first entry.
+    r[0] = round(r[0])
+    
+    # Compose.
+    r = compose(r)
+    
+    return r
+
+def main():    
+    a, k = key_gen(m)
+    r = eval(a, k)
+    if DOUBLE:
+        r = eval(a, k)
+    if REVEAL:
+        print_ln("output = %s", r.reveal())
+
+main()
