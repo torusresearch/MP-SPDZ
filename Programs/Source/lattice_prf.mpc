@@ -13,13 +13,12 @@
 # BASE_RING=GFP ./Scripts/run-lattice-prf.sh
 #
 # Adjusting parameters:
-# LOG2Q=12 LOG2P=8 BIT_LENGTH=32 BASE_RING=GFP KEYGEN=0 COMPOSE=1 ./Scripts/run-lattice-prf.sh
-# LOG2Q=32 LOG2P=24 BIT_LENGTH=72 BASE_RING=GFP KEYGEN=0 COMPOSE=1 ./Scripts/run-lattice-prf.sh
+# LOG2Q=12 LOG2P=8 INT_SIZE=32 BASE_RING=GFP KEYGEN=0 COMPOSE=1 ./Scripts/run-lattice-prf.sh
+# LOG2Q=32 LOG2P=24 INT_SIZE=72 BASE_RING=GFP KEYGEN=0 COMPOSE=1 ./Scripts/run-lattice-prf.sh
 
 import os
 from random import randint
 
-from Compiler import program
 from Compiler.types import *
 from Compiler.library import print_ln
 
@@ -66,7 +65,7 @@ if COMPOSE:
     # Compute how many p-bit values we need to generate a random element in the
     # base ring.
     stat = 40 # statistical distance
-    l = (BITS + stat) // log2p # number of p-bit values
+    l = math.ceil((BITS + stat) / log2p) # number of p-bit values
 
 print(f"ring={BASE_RING.value}, q=2^{log2q}, p=2^{log2p}, m={m}, l={l}")
 print(f"KEYGEN={KEYGEN}, COMPOSE={COMPOSE}, REVEAL={REVEAL}, OPTIMIZE={OPTIMIZE}")
