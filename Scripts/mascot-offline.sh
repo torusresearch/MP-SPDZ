@@ -11,4 +11,4 @@ fi
 
 . $HERE/run-common.sh
 
-run_player mascot-party.x $* || exit 1
+run_player mascot-offline.x $* $t || exit 1
