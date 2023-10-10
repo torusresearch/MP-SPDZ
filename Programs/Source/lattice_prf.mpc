@@ -51,6 +51,7 @@ REVEAL = parse_bool(os.environ.get("REVEAL", False)) # Reval output.
 LOG2Q = int(os.environ.get("LOG2Q", 12))
 LOG2P = int(os.environ.get("LOG2P", 8))
 OPTIMIZE = parse_bool(os.environ.get("OPTIMIZE", False)) # Enable optimization.
+DOUBLE = parse_bool(os.environ.get("DOUBLE", False)) # Run evaluation twice.
 
 if OPTIMIZE and BASE_RING != BaseRing.GFP:
     raise Exception("OPTIMIZE only supported for GFP!")
@@ -177,6 +178,8 @@ def eval(a: Matrix, k: Array):
 def main():    
     a, k = key_gen(m)
     r = eval(a, k)
+    if DOUBLE:
+        r = eval(a, k)
     if REVEAL:
         print_ln("output = %s", r.reveal())
 
