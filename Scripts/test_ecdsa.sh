@@ -10,7 +10,7 @@ run()
     port=$[RANDOM+1024]
     if ! {
 	    for j in $(seq 0 $2); do
-		./$1-ecdsa-party.x -p $j 1 2>/dev/null & true
+		./$1-ecdsa-party.x -pn $port -p $j 1 2>/dev/null & true
 	    done
 	    wait
 	} | grep "Online checking"; then
