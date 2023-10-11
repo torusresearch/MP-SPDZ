@@ -1,10 +1,10 @@
 ### Optimized Lattice PRF
 #
 # Compile and run:
-#   ./Scripts/compile-run.py -O -E mal-shamir -F 32 -g 256 lattice_prf_opt
+#   ./Scripts/compile-run.py -O -E mal-shamir -g 256 lattice_prf_opt
 #
 # Compile and run with separate preprocessing:
-#   PROG=lattice_prf_opt && ./compile.py -O -F 32 -g 256 $PROG && ./Scripts/mal-shamir-offline.sh -lgp 256 $PROG && ./Scripts/mal-shamir.sh -F $PROG
+#   PROG=lattice_prf_opt && ./compile.py -O -g 256 $PROG && ./Scripts/mal-shamir-offline.sh -lgp 256 $PROG && ./Scripts/mal-shamir.sh -F $PROG
 #
 # Compile and run with a single command and adjusted parameters:
 #   PROG=lattice_prf_opt LOG2Q=12 LOG2P=8 ./Scripts/run-lattice-prf.sh
