@@ -13,8 +13,8 @@
 # BASE_RING=GFP ./Scripts/run-lattice-prf.sh
 #
 # Adjusting parameters:
-# LOG2Q=12 LOG2P=8 INT_SIZE=32 BASE_RING=GFP KEYGEN=0 COMPOSE=1 ./Scripts/run-lattice-prf.sh
-# LOG2Q=32 LOG2P=24 INT_SIZE=72 BASE_RING=GFP KEYGEN=0 COMPOSE=1 ./Scripts/run-lattice-prf.sh
+#   LOG2Q=12 LOG2P=8 BASE_RING=GFP KEYGEN=0 COMPOSE=1 ./Scripts/run-lattice-prf.sh
+#   LOG2Q=32 LOG2P=24 BASE_RING=GFP KEYGEN=0 COMPOSE=1 ./Scripts/run-lattice-prf.sh
 
 import os
 from random import randint
@@ -43,23 +43,24 @@ def parse_bool(s: str) -> bool:
     return bool(int(s))
 
 BASE_RING = BaseRing.parse(os.environ.get("BASE_RING", "GFP"))
-BITS = int(os.environ.get("BITS", 256)) # Number of random bits to produce.
 KEYGEN = parse_bool(os.environ.get("KEYGEN", False)) # Run key generation.
 COMPOSE = parse_bool(os.environ.get("COMPOSE", True)) # Compose PRF output into single base ring element.
 REVEAL = parse_bool(os.environ.get("REVEAL", False)) # Reval output.
+BITS = int(os.environ.get("BITS", 256)) # Number of random bits to produce.
 LOG2Q = int(os.environ.get("LOG2Q", 12))
 LOG2P = int(os.environ.get("LOG2P", 8))
+DIM = int(os.environ.get("DIM", 512)) # Lattice dimension.
 OPTIMIZE = parse_bool(os.environ.get("OPTIMIZE", False)) # Enable optimization.
 DOUBLE = parse_bool(os.environ.get("DOUBLE", False)) # Run evaluation twice.
 
 if OPTIMIZE and BASE_RING != BaseRing.GFP:
     raise Exception("OPTIMIZE only supported for GFP!")
 
-log2q, log2p = LOG2Q, LOG2P
-# log2q, log2p = 12, 8
-# log2q, log2p = 32, 24
-m = 512
-l = BITS // log2p
+log2q = LOG2Q # Lattice modulus.
+log2p = LOG2P # Rounding modulus.
+m = DIM # Lattice dimension
+l = BITS // log2p # Output vector length.
+int_size = ((2**log2q - 1)**2 * m).bit_length() # Maximum integer size.
 
 if COMPOSE:
     # Compute how many p-bit values we need to generate a random element in the
@@ -104,7 +105,7 @@ def mod(s: sint):
     if BASE_RING == BaseRing.Z2N:
         return s # already mod 2^log2q
     elif BASE_RING == BaseRing.GFP:
-        return s.mod2m(log2q)
+        return s.mod2m(log2q, int_size, signed=False)
     raise_ring_unsupported()
 
 def round(s: sint):
@@ -112,7 +113,7 @@ def round(s: sint):
     if BASE_RING == BaseRing.Z2N:
         return s.right_shift(log2q - log2p)
     elif BASE_RING == BaseRing.GFP:
-        return s.right_shift(log2q - log2p)
+        return s.right_shift(log2q - log2p, log2q, signed=False)
     raise_ring_unsupported()
 
 def compose(a: Array) -> sint:

@@ -7,8 +7,8 @@
 #   PROG=lattice_prf_opt && ./compile.py -O -F 32 -g 256 $PROG && ./Scripts/mal-shamir-offline.sh -lgp 256 $PROG && ./Scripts/mal-shamir.sh -F $PROG
 #
 # Compile and run with a single command and adjusted parameters:
-#   PROG=lattice_prf_opt LOG2Q=12 LOG2P=8 INT_SIZE=32 ./Scripts/run-lattice-prf.sh
-#   PROG=lattice_prf_opt LOG2Q=32 LOG2P=24 INT_SIZE=72 ./Scripts/run-lattice-prf.sh
+#   PROG=lattice_prf_opt LOG2Q=12 LOG2P=8 ./Scripts/run-lattice-prf.sh
+#   PROG=lattice_prf_opt LOG2Q=32 LOG2P=24 ./Scripts/run-lattice-prf.sh
 
 import os
 from random import randint
@@ -32,11 +32,15 @@ DOUBLE = parse_bool(os.environ.get("DOUBLE", False)) # Run evaluation twice.
 log2q = LOG2Q # Lattice modulus.
 log2p = LOG2P # Rounding modulus.
 m = DIM # Lattice dimension
+int_size = ((2**log2q - 1)**2 * m).bit_length() # Maximum integer size.
 
 # Compute how many p-bit elements we need to generate a random element in the
 # base ring.
 stat = 40 # Controls the statistical distance to the uniform distribution.
 l = math.ceil((BITS + stat) / log2p) # Number of p-bit elements required to fill up the target range.
+
+if DOUBLE:
+    l *= 2
 
 print(f"q=2^{log2q}, p=2^{log2p}, m={m}, l={l}")
 print(f"KEYGEN={KEYGEN}, REVEAL={REVEAL}, DOUBLE={DOUBLE}")
@@ -50,11 +54,11 @@ def srand():
 
 def mod(s: sint):
     """Reduce modulo q."""
-    return s.mod2m(log2q)
+    return s.mod2m(log2q, int_size, signed=False)
 
 def round(s: sint):
     """Round to nearest p-bit value."""
-    return s.right_shift(log2q - log2p)
+    return s.right_shift(log2q - log2p, log2q, signed=False)
 
 def compose(a: Array) -> sint:
     l = len(a)
@@ -85,19 +89,30 @@ def eval(a: Array, k: Matrix):
     for i in range(l):
         r[i] = mod(r[i])
     
-    # Round first entry.
-    r[0] = round(r[0])
-    
-    # Compose.
-    r = compose(r)
+    if DOUBLE:
+        l_half = l//2
+        
+        # Round first entry.
+        r[0] = round(r[0])
+        r[l_half] = round(r[l_half])
+        
+        # Compose.
+        r = [
+            compose(r[:l_half]),
+            compose(r[l_half:]),
+        ]
+    else:
+        # Round first entry.
+        r[0] = round(r[0])
+        
+        # Compose.
+        r = compose(r)
     
     return r
 
 def main():    
     a, k = key_gen(m)
     r = eval(a, k)
-    if DOUBLE:
-        r = eval(a, k)
     if REVEAL:
         print_ln("output = %s", r.reveal())
 
