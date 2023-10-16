@@ -1,15 +1,19 @@
-### Optimized Lattice PRF
+### Optimized Lattice PRF with Conjectured Security
 #
 # Compile and run:
-#   ./Scripts/compile-run.py -O -E mal-shamir -g 256 lattice_prf_opt
+#   ./Scripts/compile-run.py -O -E mal-shamir -g 256 lattice_prf_con1
 #
 # Compile and run with separate preprocessing:
-#   PROG=lattice_prf_opt && ./compile.py -O -g 256 $PROG && ./Scripts/mal-shamir-offline.sh -lgp 256 $PROG && ./Scripts/mal-shamir.sh -F $PROG
+#   PROG=lattice_prf_con1 && ./compile.py -O -g 256 $PROG && ./Scripts/mal-shamir-offline.sh -lgp 256 $PROG && ./Scripts/mal-shamir.sh -F $PROG
 #
 # Compile and run with a single command and adjusted parameters:
-#   PROG=lattice_prf_opt LOG2Q=12 LOG2P=8 ./Scripts/run-lattice-prf.sh
-#   PROG=lattice_prf_opt LOG2Q=32 LOG2P=24 ./Scripts/run-lattice-prf.sh
-#   PROG=lattice_prf_opt LOG2Q=64 LOG2P=56 ./Scripts/run-lattice-prf.sh
+#   PROG=lattice_prf_con1 LOG2Q=12 LOG2P=8 ./Scripts/run-lattice-prf.sh
+#   PROG=lattice_prf_con1 LOG2Q=32 LOG2P=24 ./Scripts/run-lattice-prf.sh
+#   PROG=lattice_prf_con1 LOG2Q=64 LOG2P=56 ./Scripts/run-lattice-prf.sh
+#
+# Measure total communication:
+#   LOG2Q=12 LOG2P=8 ./Scripts/compile-run.py -O -E mal-shamir -g 256 lattice_prf_con1 -- --batch-size 100
+
 
 import os
 from random import randint
@@ -84,10 +88,6 @@ def key_gen(m: int) -> (Array, Matrix):
 def eval(a: Array, k: Matrix):
     r =  k * a
     
-    # Modulo q.
-    for i in range(l):
-        r[i] = mod(r[i])
-    
     if DOUBLE:
         l_half = l//2
         
@@ -95,12 +95,22 @@ def eval(a: Array, k: Matrix):
         r[0] = round(r[0])
         r[l_half] = round(r[l_half])
         
+        # Modulo q, skip first entry.
+        for i in range(1, l_half):
+            r[i] = mod(r[i])
+        for i in range(l_half+1, l):
+            r[i] = mod(r[i])
+        
         # Compose.
         r = [
             compose(r[:l_half]),
             compose(r[l_half:]),
         ]
     else:
+        # Modulo q, skip first entry.
+        for i in range(1, l):
+            r[i] = mod(r[i])
+            
         # Round first entry.
         r[0] = round(r[0])
         
