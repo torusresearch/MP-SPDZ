@@ -1,20 +1,18 @@
-#TODO Remove Z2N support?
-
 ### Lattice PRF
-# Run with one of the following commands:
-# BASE_RING=Z2N ./Scripts/compile-run.py -O -E mal-rep-ring -R 12 lattice_prf
-# BASE_RING=GFP ./Scripts/compile-run.py -O -E mal-shamir -g 256 lattice_prf
 #
-# For separate preprocessing:
-# BASE_RING=Z2N ./compile.py -O -R 12 lattice_prf && ./Fake-Offline.x 3 -lgp 12 && ./Scripts/mal-rep-ring.sh -F lattice_prf
-# BASE_RING=GFP ./compile.py -O lattice_prf && ./Scripts/mal-shamir-offline.sh -lgp 256 lattice_prf && ./Scripts/mal-shamir.sh -F lattice_prf
+# Compile and run:
+#   PROG=lattice_prf && ./Scripts/compile-run.py -O -E mal-shamir -g 256 $PROG
 #
-# As a single command:
-# BASE_RING=GFP ./Scripts/run-lattice-prf.sh
+# Compile and run with separate preprocessing:
+#   PROG=lattice_prf && ./compile.py -O -g 256 $PROG && ./Scripts/mal-shamir-offline.sh -lgp 256 $PROG && ./Scripts/mal-shamir.sh -F $PROG
 #
-# Adjusting parameters:
-#   LOG2Q=12 LOG2P=8 BASE_RING=GFP KEYGEN=0 COMPOSE=1 ./Scripts/run-lattice-prf.sh
-#   LOG2Q=32 LOG2P=24 BASE_RING=GFP KEYGEN=0 COMPOSE=1 ./Scripts/run-lattice-prf.sh
+# Compile and run with a single command and adjusted parameters:
+#   PROG=lattice_prf LOG2Q=12 LOG2P=8 ./Scripts/run-lattice-prf.sh
+#   PROG=lattice_prf LOG2Q=32 LOG2P=24 ./Scripts/run-lattice-prf.sh
+#   PROG=lattice_prf LOG2Q=64 LOG2P=56 ./Scripts/run-lattice-prf.sh
+#
+# Measure total communication:
+#   PROG=lattice_prf && LOG2Q=12 LOG2P=8 ./Scripts/compile-run.py -O -E mal-shamir -g 256 $PROG -- --batch-size 100
 
 import os
 from random import randint
@@ -22,164 +20,94 @@ from random import randint
 from Compiler.types import *
 from Compiler.library import print_ln
 
-from enum import Enum
-
-class BaseRing(Enum):
-    Z2N = "Z2N"
-    GFP = "GFP"
-
-    @staticmethod
-    def parse(s: str):
-        if s == BaseRing.Z2N.value:
-            return BaseRing.Z2N
-        elif s == BaseRing.GFP.value:
-            return BaseRing.GFP
-        raise Exception(f"Parameter {s} is not a valid base ring!")
-
-def raise_ring_unsupported():
-    raise Exception(f"BASE_RING {BASE_RING} unsupported!")
-
 def parse_bool(s: str) -> bool:
     return bool(int(s))
 
-BASE_RING = BaseRing.parse(os.environ.get("BASE_RING", "GFP"))
-KEYGEN = parse_bool(os.environ.get("KEYGEN", False)) # Run key generation.
-COMPOSE = parse_bool(os.environ.get("COMPOSE", True)) # Compose PRF output into single base ring element.
-REVEAL = parse_bool(os.environ.get("REVEAL", False)) # Reval output.
 BITS = int(os.environ.get("BITS", 256)) # Number of random bits to produce.
-LOG2Q = int(os.environ.get("LOG2Q", 12))
-LOG2P = int(os.environ.get("LOG2P", 8))
+KEYGEN = parse_bool(os.environ.get("KEYGEN", False)) # Run key generation.
+REVEAL = parse_bool(os.environ.get("REVEAL", False)) # Reval output.
+LOG2Q = int(os.environ.get("LOG2Q", 12)) # Lattice modulus bitlength.
+LOG2P = int(os.environ.get("LOG2P", 8)) # Rounding modulus bitlength.
 DIM = int(os.environ.get("DIM", 512)) # Lattice dimension.
-OPTIMIZE = parse_bool(os.environ.get("OPTIMIZE", False)) # Enable optimization.
 DOUBLE = parse_bool(os.environ.get("DOUBLE", False)) # Run evaluation twice.
-
-if OPTIMIZE and BASE_RING != BaseRing.GFP:
-    raise Exception("OPTIMIZE only supported for GFP!")
 
 log2q = LOG2Q # Lattice modulus.
 log2p = LOG2P # Rounding modulus.
 m = DIM # Lattice dimension
-l = BITS // log2p # Output vector length.
 int_size = ((2**log2q - 1)**2 * m).bit_length() # Maximum integer size.
 
-if COMPOSE:
-    # Compute how many p-bit values we need to generate a random element in the
-    # base ring.
-    stat = 40 # statistical distance
-    l = math.ceil((BITS + stat) / log2p) # number of p-bit values
+# Compute how many p-bit elements we need to generate a random element in the
+# base ring.
+stat = 40 # Controls the statistical distance to the uniform distribution.
+l = math.ceil((BITS + stat) / log2p) # Number of p-bit elements required to fill up the target range.
 
-print(f"ring={BASE_RING.value}, q=2^{log2q}, p=2^{log2p}, m={m}, l={l}")
-print(f"KEYGEN={KEYGEN}, COMPOSE={COMPOSE}, REVEAL={REVEAL}, OPTIMIZE={OPTIMIZE}")
+if DOUBLE:
+    l *= 2
+
+print(f"q=2^{log2q}, p=2^{log2p}, m={m}, l={l}")
+print(f"KEYGEN={KEYGEN}, REVEAL={REVEAL}, DOUBLE={DOUBLE}")
 
 def crand():
     r = randint(0, 2**log2q-1)
-    if BASE_RING == BaseRing.Z2N:
-        return cint(r)
-    elif BASE_RING == BaseRing.GFP:
-        return cint(r)
-    raise_ring_unsupported()
+    return cint(r)
 
 def srand():
-    if BASE_RING == BaseRing.Z2N:
-        return sint.get_random()
-    elif BASE_RING == BaseRing.GFP:
-        return sint.get_random_int(log2q)
-    raise_ring_unsupported()
-
-def ctype():
-    if BASE_RING == BaseRing.Z2N:
-        return cint
-    elif BASE_RING == BaseRing.GFP:
-        return cint
-    raise_ring_unsupported()
-
-def stype():
-    if BASE_RING == BaseRing.Z2N:
-        return sint
-    elif BASE_RING == BaseRing.GFP:
-        return sint
-    raise_ring_unsupported()
+    return sint.get_random_int(log2q)
 
 def mod(s: sint):
-    """Modulo q."""
-    if BASE_RING == BaseRing.Z2N:
-        return s # already mod 2^log2q
-    elif BASE_RING == BaseRing.GFP:
-        return s.mod2m(log2q, int_size, signed=False)
-    raise_ring_unsupported()
+    """Reduce modulo q."""
+    return s.mod2m(log2q, int_size, signed=False)
 
 def round(s: sint):
     """Round to nearest p-bit value."""
-    if BASE_RING == BaseRing.Z2N:
-        return s.right_shift(log2q - log2p)
-    elif BASE_RING == BaseRing.GFP:
-        return s.right_shift(log2q - log2p, log2q, signed=False)
-    raise_ring_unsupported()
+    return s.right_shift(log2q - log2p, log2q, signed=False)
 
 def compose(a: Array) -> sint:
     l = len(a)
-    if BASE_RING == BaseRing.Z2N:
-        return sum(a[i] << (i*log2p % log2q) for i in range(l))
-    elif BASE_RING == BaseRing.GFP:
-        return sum(a[i] << i*log2p for i in range(l))
-    raise_ring_unsupported()
+    log2_p1 = log2q - log2p
+    log2_p2 = 2 * log2p - log2q
+    def shift(i):
+        p1_shift = (i - 1) * log2_p1
+        p2_shift = i * log2_p2
+        return max(0, p1_shift + p2_shift)
+    return sum(a[i] << shift(i) for i in range(l))
 
-def key_gen(m: int):
-    a = Matrix(l, m, ctype())
+def key_gen(m: int) -> (Array, Matrix):
+    a = Matrix(l, m, cint)
     for i in range(l):
         for j in range(m):
             a[i][j] = crand()
-
-    k = Array(m, stype())
+            
+    k = Array(m, sint)
     for i in range(m):
-        if KEYGEN:
-            k[i] = srand()
-        else:
-            k[i] = stype()(crand())
+        k[i] = srand() if KEYGEN else sint(crand())
+    
     return a, k
 
 def eval(a: Matrix, k: Array):
-    r = a * k
-    if OPTIMIZE:
-        # Instead of rounding each element of `r` at the top and the bottom, we
-        # only round the bottom and top of the vector and then compose the
-        # elements such that the uniform bits overlap (and therefore hide) the
-        # non-uniform bits.
+    r =  a * k
+    
+    # Modulo q and round p.
+    for i in range(l):
+        r[i] = round(mod(r[i]))
+    
+    if DOUBLE:
+        l_half = l//2
         
-        # Cut off top bits. `n_top` is the number of elements from which we need
-        # to cut off the top bits in order to hide the top bits of the preceding
-        # element.
-        top_bits = log2q + l.bit_length()
-        n_top = top_bits // log2p + 1
-        for i in range(n_top):
-            r[-i-1] = r[-i-1].mod2m(log2q)
-        
-        # Cut off bottom bits. `n_bot` is the number of elements from which we
-        # need to cut off the bottom bits in order to hide the bottom bits of
-        # the next element.
-        bot_bits = log2q - log2p
-        n_bot = bot_bits // log2p + 1
-        for i in range(n_bot):
-            r[i] = r[i].right_shift(log2q - log2p)
-
-        # Compose the elements into one uniform random value by layering uniform
-        # bits on top of non-uniform bits. Account for the fact the bottom bits
-        # of the elements starting from `n_bot` are not cut off.
-        r = sum(
-            ri << i*log2p - (0 if i<n_bot else log2q-log2p)
-            for i, ri in enumerate(r))
-    else:
-        for i in range(l):
-            r[i] = round(mod(r[i]))
-        if COMPOSE:
-            r = compose(r)
+        # Compose.
+        r = [
+            compose(r[:l_half]),
+            compose(r[l_half:]),
+        ]
+    else:        
+        # Compose.
+        r = compose(r)
+    
     return r
 
 def main():    
     a, k = key_gen(m)
     r = eval(a, k)
-    if DOUBLE:
-        r = eval(a, k)
     if REVEAL:
         print_ln("output = %s", r.reveal())
 
