@@ -19,6 +19,7 @@ from random import randint
 
 from Compiler.types import *
 from Compiler.library import print_ln
+from Compiler.comparison import PRandM, BitLTL
 
 def parse_bool(s: str) -> bool:
     return bool(int(s))
@@ -38,8 +39,8 @@ int_size = ((2**log2q - 1)**2 * m).bit_length() # Maximum integer size.
 
 # Compute how many p-bit elements we need to generate a random element in the
 # base ring.
-stat = 40 # Controls the statistical distance to the uniform distribution.
-l = math.ceil((BITS + stat) / log2p) # Number of p-bit elements required to fill up the target range.
+kappa = program.security # Controls the statistical distance to the uniform distribution.
+l = math.ceil((BITS + kappa) / log2p) # Number of p-bit elements required to fill up the target range.
 
 if DOUBLE:
     l *= 2
@@ -54,13 +55,20 @@ def crand():
 def srand():
     return sint.get_random_int(log2q)
 
-def mod(s: sint):
-    """Reduce modulo q."""
-    return s.mod2m(log2q, int_size, signed=False)
-
-def round(s: sint):
-    """Round to nearest p-bit value."""
-    return s.right_shift(log2q - log2p, log2q, signed=False)
+def trunc(a: sint, k: int, m1: int, m2: int) -> sint:
+    """
+    Truncate the top and bottom bits of the `k`-bit integer `a`. Returns the
+    integer corresponding to the bits in the range `[m1:m2]`.
+    """
+    r_dprime, r_prime, r = sint(), sint(), [sint() for i in range(m2)]
+    PRandM(r_dprime, r_prime, r, k, m2, kappa)
+    c = (two_power(k-1) + a + two_power(m2) * r_dprime + r_prime).reveal()
+    # Compute separate c_prime for m1 and m2.
+    c1_prime, c2_prime = c % two_power(m1), c % two_power(m2)
+    u1, u2 = sint(), sint()
+    BitLTL(u1, c1_prime, r[:m1], kappa), BitLTL(u2, c2_prime, r, kappa)
+    a1_prime, a2_prime = c1_prime - sint.bit_compose(r[:m1]) + two_power(m1) * u1, c2_prime - r_prime + two_power(m2) * u2
+    return (a2_prime - a1_prime) / two_power(m1)
 
 def compose(a: Array) -> sint:
     l = len(a)
@@ -85,11 +93,11 @@ def key_gen(m: int) -> (Array, Matrix):
     return a, k
 
 def eval(a: Matrix, k: Array):
-    r =  a * k
+    r = a * k
     
     # Modulo q and round p.
     for i in range(l):
-        r[i] = round(mod(r[i]))
+        r[i] = trunc(r[i], int_size, log2q-log2p, log2q)
     
     if DOUBLE:
         l_half = l//2
