@@ -18,7 +18,7 @@ import os
 from random import randint
 
 from Compiler.types import *
-from Compiler.library import print_ln
+from Compiler.library import if_, print_ln
 from Compiler.comparison import PRandM, BitLTL
 
 def parse_bool(s: str) -> bool:
@@ -31,6 +31,7 @@ LOG2Q = int(os.environ.get("LOG2Q", 12)) # Lattice modulus bitlength.
 LOG2P = int(os.environ.get("LOG2P", 8)) # Rounding modulus bitlength.
 DIM = int(os.environ.get("DIM", 512)) # Lattice dimension.
 DOUBLE = parse_bool(os.environ.get("DOUBLE", False)) # Run evaluation twice.
+CHECK = parse_bool(os.environ.get("CHECK", False)) # Check result against cleartext computation.
 
 log2q = LOG2Q # Lattice modulus.
 log2p = LOG2P # Rounding modulus.
@@ -46,7 +47,7 @@ if DOUBLE:
     l *= 2
 
 print(f"q=2^{log2q}, p=2^{log2p}, m={m}, l={l}")
-print(f"KEYGEN={KEYGEN}, REVEAL={REVEAL}, DOUBLE={DOUBLE}")
+print(f"KEYGEN={KEYGEN}, REVEAL={REVEAL}, DOUBLE={DOUBLE}, CHECK={CHECK}")
 
 def crand():
     r = randint(0, 2**log2q-1)
@@ -113,10 +114,45 @@ def eval(a: Matrix, k: Array):
     
     return r
 
+def eval_clear(a: Matrix, k: Array):
+    k: Array = k.reveal()
+    
+    r = a * k
+    
+    def trunc(a: cint, k: int, m1: int, m2: int):
+        a_bits = a.bit_decompose()
+        return cint.bit_compose(a_bits[m1:m2])
+    
+    # Modulo q and round p.
+    for i in range(l):
+        r[i] = trunc(r[i], int_size, log2q-log2p, log2q)
+    
+    if DOUBLE:
+        l_half = l//2
+        
+        # Compose.
+        r = [
+            compose(r[:l_half]),
+            compose(r[l_half:]),
+        ]
+    else:        
+        # Compose.
+        r = compose(r)
+    
+    return r
+
 def main():    
     a, k = key_gen(m)
     r = eval(a, k)
     if REVEAL:
         print_ln("output = %s", r.reveal())
+    if CHECK:
+        r_clear = eval_clear(a, k)
+        r_revealed = r.reveal()
+        @if_(r_clear != r_revealed)
+        def _():
+            print_ln("r_clear    = %s", r_clear)
+            print_ln("r_revealed = %s", r_revealed)
+            print_ln("check failed")
 
 main()
