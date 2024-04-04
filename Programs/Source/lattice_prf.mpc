@@ -4,7 +4,7 @@
 #   PROG=lattice_prf && ./Scripts/compile-run.py -O -E mal-shamir -g 256 $PROG
 #
 # Compile and run with separate preprocessing:
-#   PROG=lattice_prf && ./compile.py -O -g 256 $PROG && ./Scripts/mal-shamir-offline.sh -lgp 256 $PROG && ./Scripts/mal-shamir.sh -F $PROG
+#   PROG=lattice_prf && ./compile.py -O -g 256 $PROG && ./Scripts/mal-shamir-offline.sh -lgp 256 $PROG && ./Scripts/mal-shamir.sh -F -lgp 256 $PROG
 #
 # Compile and run with a single command and adjusted parameters:
 #   PROG=lattice_prf LOG2Q=12 LOG2P=8 ./Scripts/run-lattice-prf.sh
