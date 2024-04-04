@@ -32,6 +32,7 @@ LOG2P = int(os.environ.get("LOG2P", 8)) # Rounding modulus bitlength.
 DIM = int(os.environ.get("DIM", 512)) # Lattice dimension.
 DOUBLE = parse_bool(os.environ.get("DOUBLE", False)) # Run evaluation twice.
 CHECK = parse_bool(os.environ.get("CHECK", False)) # Check result against cleartext computation.
+OUTPUT = parse_bool(os.environ.get("OUTPUT", False)) # Write result to file.
 
 log2q = LOG2Q # Lattice modulus.
 log2p = LOG2P # Rounding modulus.
@@ -47,7 +48,7 @@ if DOUBLE:
     l *= 2
 
 print(f"q=2^{log2q}, p=2^{log2p}, m={m}, l={l}")
-print(f"KEYGEN={KEYGEN}, REVEAL={REVEAL}, DOUBLE={DOUBLE}, CHECK={CHECK}")
+print(f"KEYGEN={KEYGEN}, REVEAL={REVEAL}, DOUBLE={DOUBLE}, CHECK={CHECK}, OUTPUT={OUTPUT}")
 
 def crand():
     r = randint(0, 2**log2q-1)
@@ -81,7 +82,7 @@ def compose(a: Array) -> sint:
         return max(0, p1_shift + p2_shift)
     return sum(a[i] << shift(i) for i in range(l))
 
-def key_gen(m: int) -> (Array, Matrix):
+def key_gen(m: int):
     a = Matrix(l, m, cint)
     for i in range(l):
         for j in range(m):
@@ -144,6 +145,8 @@ def eval_clear(a: Matrix, k: Array):
 def main():    
     a, k = key_gen(m)
     r = eval(a, k)
+    if OUTPUT:
+        sint.write_to_file(r)
     if REVEAL:
         print_ln("output = %s", r.reveal())
     if CHECK:
