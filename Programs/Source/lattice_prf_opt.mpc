@@ -33,11 +33,26 @@ log2q = LOG2Q # Lattice modulus.
 log2p = LOG2P # Rounding modulus.
 m = DIM # Lattice dimension
 int_size = ((2**log2q - 1)**2 * m).bit_length() # Maximum integer size.
+kappa = program.security # Statistical security level.
 
-# Compute how many p-bit elements we need to generate a random element in the
-# base ring.
-kappa = program.security # Controls the statistical distance to the uniform distribution.
-l = math.ceil((BITS + kappa) / log2p) # Number of p-bit elements required to fill up the target range.
+def stat_dist(m: int, n: int):
+    """Computes the statistical distance between U(Z_m) mod n and U(Z_n)."""
+    r = m % n
+    return math.log2(r * n - r**2) - math.log2(m * n)
+
+def derive_l():
+    base_prime = program.prime
+    # Attempt to use tight `l` and check whether the statistical distance
+    # between the generated range and the target raneg is sufficiently small.
+    l = round(math.log(base_prime, 2**log2p))
+    d = stat_dist(2**(l*log2p), base_prime)
+    if d > -kappa:
+        # If statistical distance with tight `l` is not sufficient, widen range
+        # to ensure small statistical distance.
+        return math.ceil(math.log(program.prime + 2**kappa, 2**log2p))
+    return l
+
+l = derive_l() # Number of p-bit elements required to fill up the target range.
 
 if DOUBLE:
     l *= 2
