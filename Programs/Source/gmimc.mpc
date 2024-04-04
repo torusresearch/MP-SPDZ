@@ -148,12 +148,11 @@ class GMimc:
         return state
 
 
-def plain(gmimc, mk, plaintext):
+def plain(gmimc: GMimc, mk, plaintext):
     ct = gmimc.encrypt_plain(plaintext, mk)
     return ct
 
-def shared(gmimc, mk, plaintext):
-    t = len(mk)
+def shared(gmimc: GMimc, mk, plaintext):
     mk_ = sint.Array(len(mk))
     for i in range(len(mk)):
         mk_[i] = sint(mk[i])
