@@ -19,8 +19,8 @@ import math, os
 from random import randint
 
 from Compiler.types import *
-from Compiler.library import if_, print_ln
-from Compiler.comparison import PRandM, BitLTL as BitLT
+from Compiler.library import if_, print_ln, for_range_parallel
+from Compiler.comparison import PRandM, BitLTC1 as BitLT
 
 def parse_bool(s: str) -> bool:
     return bool(int(s))
@@ -80,12 +80,17 @@ def trunc(a: sint, k: int, m1: int, m2: int) -> sint:
     r_dprime, r_prime, r = sint(), sint(), [sint() for i in range(m2)]
     PRandM(r_dprime, r_prime, r, k, m2, kappa)
     c = (two_power(k-1) + a + two_power(m2) * r_dprime + r_prime).reveal()
-    # Compute separate c_prime for m1 and m2.
-    c1_prime, c2_prime = c % two_power(m1), c % two_power(m2)
-    u1, u2 = sint(), sint()
-    BitLT(u1, c1_prime, r[:m1], kappa), BitLT(u2, c2_prime, r, kappa)
-    a1_prime, a2_prime = c1_prime - sint.bit_compose(r[:m1]) + two_power(m1) * u1, c2_prime - r_prime + two_power(m2) * u2
-    return (a2_prime - a1_prime) / two_power(m1)
+    m_list = [m1, m2]
+    a_list = [sint(), sint()]
+    @for_range_parallel(2, 2)
+    def _(i):
+        m = m_list[i]
+        c_prime = c % two_power(m)
+        r_bits = r[:m]
+        u = sint()
+        BitLT(u, c_prime, r_bits, kappa)
+        a_list[i] = c_prime - sint.bit_compose(r_bits) + two_power(m) * u
+    return (a_list[1] - a_list[0]) / two_power(m1)
 
 def compose(a: Array) -> sint:
     l = len(a)
